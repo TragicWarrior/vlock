@@ -1,6 +1,8 @@
 high
 ----
 
+- port to CMake
+
 - comments
 - documentation
 - use more glib functions:
