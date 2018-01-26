@@ -8,6 +8,19 @@
 #include "signals.h"
 #include "util.h"
 
+// comment out this line to disable built in backtrace
+// #define _GNU_BACKTRACE_ON
+
+#ifdef _GNU_BACKTRACE_ON
+
+#include <stdlib.h>
+#include <execinfo.h>
+
+void print_trace(void);
+
+#endif
+
+
 static const char *termination_blurb =
   "\n"
   "*******************************************************************************\n"
@@ -33,6 +46,12 @@ static void terminate(int signum)
 
   if (signum != SIGTERM)
     fputs(termination_blurb, stderr);
+
+#ifdef _GNU_BACKTRACE_ON
+
+    print_trace();
+
+#endif
 
   raise(signum);
 }
@@ -60,3 +79,25 @@ void install_signal_handlers(void)
   (void) sigaction(SIGSEGV, &sa, NULL);
 }
 
+#ifdef _GNU_BACKTRACE_ON
+
+void
+print_trace(void)
+{
+  void *array[10];
+  size_t size;
+  char **strings;
+  size_t i;
+
+  size = backtrace (array, 10);
+  strings = backtrace_symbols (array, size);
+
+  printf ("Obtained %zd stack frames.\n", size);
+
+  for (i = 0; i < size; i++)
+     printf ("%s\n", strings[i]);
+
+  free (strings);
+}
+
+#endif

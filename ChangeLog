@@ -1,3 +1,11 @@
+2018-01-25 Bryan Christ <bryan.christ@gmail.com>
+
+    vlock 2.2.3
+
+    * Added train screensaver
+    * Changed CFLAGS to -O0 because SL code requires it not to crash
+    * Added compile time bactrace using GNU backtrace()
+
 2008-05-14 Frank Benkstein <frank-vlock@benkstein.net>
 
 	vlock 2.2.2
