@@ -2,6 +2,7 @@ high
 ----
 
 - port to CMake
+- remove dependency on glib
 
 - comments
 - documentation
