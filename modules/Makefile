@@ -19,6 +19,8 @@ caca.so : override LDLIBS += -lcaca -lncurses
 
 train.so : override LDLIBS += -lncurses
 
+cmatrix.so : override LDLIBS += -lncurses
+
 all.o: all.c ../src/console_switch.h
 
 #generic build rule
