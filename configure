@@ -257,7 +257,7 @@ set_defaults() {
       PAM_LIBS='-ldl -lpam'
       DL_LIB='-ldl'
       CRYPT_LIB='-lcrypt'
-      MODULES="all.so new.so nosysrq.so train.so"
+      MODULES="all.so new.so nosysrq.so train.so cmatrix.so"
     ;;
     GNU/kFreeBSD)
       PAM_LIBS='-ldl -lpam'
