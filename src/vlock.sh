@@ -60,6 +60,8 @@ print_help() {
     echo >&2 "       after the given amount of time."
     echo >&2 "-S or --saver: start the screen saver plugins immediately instead"
     echo >&2 "       of waiting for [ESC] or the timeout."
+    echo >&2 "--info-box <seconds>: show a roaming \"press a key to wake\" box on"
+    echo >&2 "       the screen saver, moving every <seconds> (0 disables it)."
   fi
   echo >&2 "-v or --version: Print the version number of vlock and exit."
   echo >&2 "-h or --help: Print this help message and exit."
@@ -120,7 +122,8 @@ read_config() {
     cat > "${VLOCK_CONFIG}" <<'EOF'
 {
   "general": {
-    "wake_key": "any"
+    "wake_key": "any",
+    "info_box": 0
   },
   "modules": {
     "cmatrix": {
@@ -196,7 +199,7 @@ ${VLOCK_ENTER_PROMPT}"
 
 main() {
   short_options_with_arguments="t"
-  long_options_with_arguments="timeout"
+  long_options_with_arguments="timeout,info-box"
 
   # Parse command line arguments.
   while [ $# -gt 0 ] ; do
@@ -297,6 +300,13 @@ main() {
           exit 1
         fi
         ;;
+      --info-box)
+        VLOCK_INFO_BOX="$2"
+        if ! shift 2 ; then
+          echo >&2 "$0: option '$1' requires an argument"
+          exit 1
+        fi
+        ;;
       -h|--help)
        print_help
        exit
@@ -346,7 +356,7 @@ main() {
 
   # Export variables for vlock-main.
   export_if_set VLOCK_TIMEOUT VLOCK_PROMPT_TIMEOUT VLOCK_SAVER VLOCK_TRAIN_RANDOM
-  export_if_set VLOCK_CMATRIX_COLOR VLOCK_CMATRIX_BOLD
+  export_if_set VLOCK_CMATRIX_COLOR VLOCK_CMATRIX_BOLD VLOCK_INFO_BOX
   export_if_set VLOCK_MESSAGE VLOCK_ALL_MESSAGE VLOCK_CURRENT_MESSAGE
 
   if [ "${VLOCK_ENABLE_PLUGINS}" = "yes" ] ; then

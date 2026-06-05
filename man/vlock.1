@@ -72,6 +72,13 @@ Start the screen saver plugins immediately instead of waiting for [ESC] or the
 \fB-t,--timeout\fR period.  Has no effect unless a screen saver plugin is
 loaded.
 .PP
+.B --info-box <seconds>
+.IP
+While a screen saver is running, display a small box reading ``Press <key> key
+to wake.''  Every <seconds> the box jumps to a new random position on screen.
+A value of 0 (the default) disables it.  Supported by the \fBcmatrix\fR and
+\fBtrain\fR savers.
+.PP
 .B -h,--help
 .IP
 Print a brief help message.
@@ -126,6 +133,11 @@ started immediately, as with \fB-S,--saver\fR.
 .IP
 Selects which key dismisses the screen saver and brings up the password prompt.
 One of \fBany\fR (the default), \fBenter\fR, \fBspace\fR or \fBbackspace\fR.
+.PP
+.B VLOCK_INFO_BOX
+.IP
+Move interval, in seconds, for the screen saver's ``Press <key> key to wake.''
+box, as with \fB--info-box\fR.  0 (the default) disables it.
 .PP
 .B VLOCK_PROMPT_TIMEOUT
 .IP

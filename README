@@ -47,7 +47,9 @@ vlock can also run a screen saver while the console is locked.  Name a
 screen saver plugin on the command line -- "vlock cmatrix" for falling
 Matrix characters or "vlock train" for a steam locomotive.  The saver
 starts when you press ESC, after the --timeout (-t) period, or
-immediately with -S; press a key to bring up the password prompt.
+immediately with -S; press a key to bring up the password prompt.  The
+--info-box <seconds> option overlays a roaming box reminding you which
+key wakes the saver.
 
 Defaults such as the wake key and the cmatrix color are read from the
 JSON configuration file ~/.config/vlock/config.json, which is created

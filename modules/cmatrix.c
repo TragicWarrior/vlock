@@ -45,6 +45,7 @@
 #include "cmatrix.h"
 #include "process.h"
 #include "vlock_plugin.h"
+#include "info_box.h"
 
 
 static int cmatrix_main(void *argument);
@@ -740,6 +741,7 @@ int cmatrix_main(void *argument) {
                 }
             }
         }
+        info_box_draw();
         napms(update * 10);
     }
     // finish();

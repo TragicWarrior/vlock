@@ -37,6 +37,7 @@
 #include "process.h"
 #include "vlock_plugin.h"
 #include "train.h"
+#include "info_box.h"
 
 void add_smoke(int y, int x);
 void add_man(int y, int x);
@@ -126,7 +127,7 @@ train_main(void *argument)
     (void)argument;
 
     /* Vertical-position randomization is opt-in via the VLOCK_TRAIN_RANDOM
-     * environment variable (set by vlock's --train-random option). */
+     * environment variable (config key modules.train.random). */
     train_random = env_is_true("VLOCK_TRAIN_RANDOM");
 
     if (train_random)
@@ -152,6 +153,7 @@ train_main(void *argument)
                 if (add_D51(x) == ERR) break;
             }
             getch();
+            info_box_draw();
             refresh();
             usleep(20000);
         }

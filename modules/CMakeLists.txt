@@ -8,6 +8,10 @@ set(_libs_train   PkgConfig::NCURSES)
 set(_libs_cmatrix PkgConfig::NCURSES)
 set(_libs_caca    PkgConfig::NCURSES caca)
 
+# Per-module extra sources.  The screen savers share the info-box overlay.
+set(_srcs_cmatrix info_box.c)
+set(_srcs_train   info_box.c)
+
 # Privileged modules: installed group=${VLOCK_GROUP}, mode=${VLOCK_MODULE_MODE}.
 set(PRIVILEGED_MODULES new nosysrq)
 
@@ -16,7 +20,7 @@ foreach(m IN LISTS MODULES)
     message(FATAL_ERROR "Unknown module '${m}': ${m}.c does not exist")
   endif()
 
-  add_library(mod_${m} MODULE ${m}.c)
+  add_library(mod_${m} MODULE ${m}.c ${_srcs_${m}})
   set_target_properties(mod_${m} PROPERTIES
     PREFIX ""
     OUTPUT_NAME "${m}"

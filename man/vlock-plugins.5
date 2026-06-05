@@ -34,7 +34,8 @@ On Linux the following screen saver plugins are also built and installed by
 default.  A screen saver runs while the console is locked: it starts when you
 press [ESC], after the \fB-t,--timeout\fR period of inactivity (see vlock(1)),
 or immediately when \fB-S,--saver\fR is given.  Pressing the wake key brings up
-the password prompt.
+the password prompt.  The \fB--info-box\fR option can overlay a roaming box
+that reminds the user which key wakes the saver.
 .PP
 .B cmatrix
 .IP
@@ -61,6 +62,12 @@ environment variables.  The relevant keys are:
 Which key dismisses the screen saver: \fBany\fR (the default), \fBenter\fR,
 \fBspace\fR or \fBbackspace\fR.  Maps to \fBVLOCK_WAKE_KEY\fR.
 .PP
+.B general.info_box
+.IP
+Move interval in seconds for the ``Press <key> key to wake.'' box shown over
+the saver; 0 (the default) disables it.  Maps to \fBVLOCK_INFO_BOX\fR, and is
+also settable with the \fB--info-box\fR option to vlock(1).
+.PP
 .B modules.cmatrix.color
 .IP
 Color of the cmatrix saver: \fBgreen\fR (the default), \fBred\fR, \fBblue\fR,
@@ -83,7 +90,7 @@ JSON it is ignored entirely):
 .RS
 .nf
 {
-  "general": { "wake_key": "any" },
+  "general": { "wake_key": "any", "info_box": 10 },
   "modules": {
     "cmatrix": { "color": "rainbow", "bold": 2 },
     "train":   { "random": true }
