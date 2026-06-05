@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(vlock VERSION 2.2.4 LANGUAGES C)
+project(vlock VERSION 2.3.0 LANGUAGES C)
 
 #=============================================================================
 # Configuration options (mirror the old ./configure / config.mk knobs)
@@ -13,7 +13,7 @@ option(ENABLE_PLUGINS "Enable plugin support in vlock-main" ON)
 option(ENABLE_ROOT_PASSWORD "Also accept the root password to unlock" ON)
 
 # Which modules to build (only meaningful when ENABLE_PLUGINS is ON).
-set(MODULES "all;new;nosysrq;train;cmatrix"
+set(MODULES "all;new;nosysrq;train;cmatrix;wetpipes"
     CACHE STRING "Semicolon-separated list of plugin modules to build")
 
 set(VLOCK_GROUP "vlock" CACHE STRING "Group owning privileged plugins")

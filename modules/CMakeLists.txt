@@ -4,13 +4,15 @@
 pkg_check_modules(NCURSES IMPORTED_TARGET ncurses)
 
 # Per-module extra link libraries.
-set(_libs_train   PkgConfig::NCURSES)
-set(_libs_cmatrix PkgConfig::NCURSES)
-set(_libs_caca    PkgConfig::NCURSES caca)
+set(_libs_train    PkgConfig::NCURSES)
+set(_libs_cmatrix  PkgConfig::NCURSES)
+set(_libs_wetpipes PkgConfig::NCURSES)
+set(_libs_caca     PkgConfig::NCURSES caca)
 
 # Per-module extra sources.  The screen savers share the info-box overlay.
-set(_srcs_cmatrix info_box.c)
-set(_srcs_train   info_box.c)
+set(_srcs_cmatrix  info_box.c)
+set(_srcs_train    info_box.c)
+set(_srcs_wetpipes info_box.c)
 
 # Privileged modules: installed group=${VLOCK_GROUP}, mode=${VLOCK_MODULE_MODE}.
 set(PRIVILEGED_MODULES new nosysrq)
