@@ -89,8 +89,12 @@ char *prompt(const char *msg, const struct timespec *timeout, GError **error)
   /* Discard all unread input characters. */
   (void) tcflush(STDIN_FILENO, TCIFLUSH);
 
-  /* Read the string one character at a time. */
-  for (len = 0; len < sizeof buffer - 1; len++) {
+  /* Read the string one character at a time.  wait_for_character() puts the
+   * terminal in non-canonical mode, so the kernel performs no line editing;
+   * handle the erase (backspace) key here.  Otherwise it would be stored as a
+   * literal character in the password and break authentication. */
+  len = 0;
+  while (len < sizeof buffer - 1) {
     char c = wait_for_character(NULL, timeout, &err);
 
     if (err != NULL) {
@@ -98,9 +102,14 @@ char *prompt(const char *msg, const struct timespec *timeout, GError **error)
       goto out;
     } else if (c == '\n' || c == '\r') {
       break;
+    } else if (c == '\b' || c == 0x7f) {
+      /* Backspace / delete: erase the previous character, if any. */
+      if (len > 0)
+        len--;
+      continue;
     }
 
-    buffer[len] = c;
+    buffer[len++] = c;
   }
 
   /* Terminate the string. */
