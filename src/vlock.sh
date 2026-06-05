@@ -60,8 +60,6 @@ print_help() {
     echo >&2 "       after the given amount of time."
     echo >&2 "-S or --saver: start the screen saver plugins immediately instead"
     echo >&2 "       of waiting for [ESC] or the timeout."
-    echo >&2 "--train-random: randomize the 'train' saver's vertical start"
-    echo >&2 "       position on each pass."
   fi
   echo >&2 "-v or --version: Print the version number of vlock and exit."
   echo >&2 "-h or --help: Print this help message and exit."
@@ -125,6 +123,10 @@ read_config() {
     "wake_key": "any"
   },
   "modules": {
+    "cmatrix": {
+      "color": "green",
+      "bold": 0
+    },
     "train": {
       "random": false
     }
@@ -288,10 +290,6 @@ main() {
         VLOCK_SAVER=y
         shift
         ;;
-      --train-random)
-        VLOCK_TRAIN_RANDOM=y
-        shift
-        ;;
       -t|--timeout)
         VLOCK_TIMEOUT="$2"
         if ! shift 2 ; then
@@ -348,6 +346,7 @@ main() {
 
   # Export variables for vlock-main.
   export_if_set VLOCK_TIMEOUT VLOCK_PROMPT_TIMEOUT VLOCK_SAVER VLOCK_TRAIN_RANDOM
+  export_if_set VLOCK_CMATRIX_COLOR VLOCK_CMATRIX_BOLD
   export_if_set VLOCK_MESSAGE VLOCK_ALL_MESSAGE VLOCK_CURRENT_MESSAGE
 
   if [ "${VLOCK_ENABLE_PLUGINS}" = "yes" ] ; then

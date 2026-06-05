@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
+#include <strings.h>
 #include <time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -55,6 +56,7 @@ cmatrix **matrix = (cmatrix **) NULL;
 int *length = NULL;  /* Length of cols in each line */
 int *spaces = NULL;  /* Spaces left to fill */
 int *updates = NULL; /* What does this do again? */
+int *colors = NULL;  /* Per-stream color (used in rainbow mode) */
 volatile sig_atomic_t signal_status = 0; /* Indicates a caught signal */
 
 
@@ -120,6 +122,17 @@ void *nmalloc(size_t howmuch) {
     return r;
 }
 
+/* Vivid colors used for per-stream rainbow coloring.  Black is omitted (it
+ * maps to the default pair and would not read as a distinct color) and white
+ * is reserved for the bright stream head. */
+static const int rainbow_colors[] = {
+    COLOR_GREEN, COLOR_RED, COLOR_BLUE, COLOR_YELLOW, COLOR_CYAN, COLOR_MAGENTA,
+};
+
+static int random_rainbow_color(void) {
+    return rainbow_colors[rand() % (int)(sizeof rainbow_colors / sizeof rainbow_colors[0])];
+}
+
 /* Initialize the global variables */
 void var_init(void) {
     int i, j;
@@ -159,6 +172,11 @@ void var_init(void) {
     }
     updates = nmalloc(COLS * sizeof(int));
 
+    if (colors != NULL) {
+        free(colors);
+    }
+    colors = nmalloc(COLS * sizeof(int));
+
     /* Make the matrix */
     for (i = 0; i <= LINES; i++) {
         for (j = 0; j <= COLS - 1; j += 2) {
@@ -188,6 +206,9 @@ void var_init(void) {
 
         /* And set updates[] array for update speed. */
         updates[j] = (int) rand() % 3 + 1;
+
+        /* Each stream starts with its own random rainbow color. */
+        colors[j] = random_rainbow_color();
     }
 
 }
@@ -241,6 +262,30 @@ void resize_screen(void) {
     refresh();
 }
 
+/* Map a color name to its ncurses color constant, or -1 if unrecognized. */
+static int cmatrix_color(const char *name) {
+    if (name == NULL)
+        return -1;
+    else if (!strcasecmp(name, "green"))
+        return COLOR_GREEN;
+    else if (!strcasecmp(name, "red"))
+        return COLOR_RED;
+    else if (!strcasecmp(name, "blue"))
+        return COLOR_BLUE;
+    else if (!strcasecmp(name, "white"))
+        return COLOR_WHITE;
+    else if (!strcasecmp(name, "yellow"))
+        return COLOR_YELLOW;
+    else if (!strcasecmp(name, "cyan"))
+        return COLOR_CYAN;
+    else if (!strcasecmp(name, "magenta"))
+        return COLOR_MAGENTA;
+    else if (!strcasecmp(name, "black"))
+        return COLOR_BLACK;
+    else
+        return -1;
+}
+
 int cmatrix_main(void *argument) {
 
     // int i, y, z, optchr, keypress;
@@ -267,6 +312,29 @@ int cmatrix_main(void *argument) {
 
     // supress compiler warning for now
     (void)argument;
+
+    /* Color and bold come from the JSON config / environment, since the getopt
+     * parsing below is disabled in the vlock port.  For the color, the special
+     * value "rainbow" gives each stream its own color; an unset or unrecognized
+     * color leaves the green default in place.  Bold is 0 (off), 1 (partial) or
+     * 2 (all); anything else leaves the default (off). */
+    {
+        const char *cfg_color = getenv("VLOCK_CMATRIX_COLOR");
+        const char *cfg_bold = getenv("VLOCK_CMATRIX_BOLD");
+
+        if (cfg_color != NULL && !strcasecmp(cfg_color, "rainbow")) {
+            rainbow = 1;
+        } else {
+            int color = cmatrix_color(cfg_color);
+
+            if (color != -1)
+                mcolor = color;
+        }
+
+        if (cfg_bold != NULL && cfg_bold[1] == '\0'
+            && cfg_bold[0] >= '0' && cfg_bold[0] <= '2')
+            bold = cfg_bold[0] - '0';
+    }
 
     /* Many thanks to morph- (morph@jmss.com) for this getopt patch */
 
@@ -540,6 +608,9 @@ int cmatrix_main(void *argument) {
                         }
 
                         spaces[j] = (int) rand() % LINES + 1;
+
+                        /* New stream in this column: give it a new color. */
+                        colors[j] = random_rainbow_color();
                     }
                     i = 0;
                     y = 0;
@@ -600,6 +671,11 @@ int cmatrix_main(void *argument) {
                 y = 0;
                 z = LINES - 1;
             }
+            /* The stream's body color: its own color in rainbow mode,
+             * otherwise the single configured color.  Constant down the
+             * column so the whole stream stays one color as it falls. */
+            int stream_color = rainbow ? colors[j] : mcolor;
+
             for (i = y; i <= z; i++) {
                 move(i - y, j);
 
@@ -630,31 +706,7 @@ int cmatrix_main(void *argument) {
                     }
                 } else {
 
-                    if(rainbow){ 
-                        int randomColor = rand() % 6;
-
-                        switch(randomColor){
-                            case 0:
-                                mcolor = COLOR_GREEN;
-                                break;
-                            case 1: 
-                                mcolor = COLOR_BLUE;
-                                break;
-                            case 2: 
-                                mcolor = COLOR_BLACK;
-                                break;
-                            case 3:
-                                mcolor = COLOR_YELLOW;
-                                break;
-                            case 4:
-                                mcolor = COLOR_CYAN;
-                                break;
-                            case 5: 
-                                mcolor = COLOR_MAGENTA;
-                                break;
-                       }
-                    }
-                    attron(COLOR_PAIR(mcolor));
+                    attron(COLOR_PAIR(stream_color));
                     if (matrix[i][j].val == 1) {
                         if (bold) {
                             attron(A_BOLD);
@@ -684,7 +736,7 @@ int cmatrix_main(void *argument) {
                             attroff(A_ALTCHARSET);
                         }
                     }
-                    attroff(COLOR_PAIR(mcolor));
+                    attroff(COLOR_PAIR(stream_color));
                 }
             }
         }
