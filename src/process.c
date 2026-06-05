@@ -219,15 +219,21 @@ bool create_child(struct child_process *child, GError **error)
 
     (void) close_fds(&except_fds);
 
-    (void) setgid(getgid());
-    (void) setuid(getuid());
+    /* Drop privileges permanently.  vlock-main is setuid root, so if this
+     * fails we must abort instead of running the child with root privileges.
+     * setgid() must come before setuid(). */
+    if (setgid(getgid()) != 0 || setuid(getuid()) != 0)
+      _exit(1);
 
     if (child->function != NULL) {
       (void) close(status_pipe[1]);
       _exit(child->function(child->argument));
     } else {
       execv(child->path, (char *const*) child->argv);
-      (void) write(status_pipe[1], &errno, sizeof errno);
+      /* execv only returns on failure; report errno to the parent.  Nothing
+       * can be done if this write itself fails. */
+      ssize_t errno_written = write(status_pipe[1], &errno, sizeof errno);
+      (void) errno_written;
     }
 
     _exit(1);

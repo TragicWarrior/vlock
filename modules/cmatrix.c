@@ -124,6 +124,15 @@ void *nmalloc(size_t howmuch) {
 void var_init(void) {
     int i, j;
 
+    /* Guard against degenerate terminal sizes.  Several places below compute
+     * rand() % (LINES - 3), which divides by zero (SIGFPE) or goes negative
+     * when the terminal has fewer than 4 rows.  resize_screen() clamps too,
+     * but the very first var_init() runs before any resize. */
+    if (LINES < 10)
+        LINES = 10;
+    if (COLS < 10)
+        COLS = 10;
+
     if (matrix != NULL) {
         free(matrix[0]);
         free(matrix);
@@ -253,9 +262,6 @@ int cmatrix_main(void *argument) {
     int randmin = 0;
     int pause = 0;
 
-    char *oldtermname;
-    char *syscmd = NULL;
-
     time_t t;
     srand((unsigned) time(&t));
 
@@ -344,7 +350,6 @@ int cmatrix_main(void *argument) {
         bold = 0;
     }
 
-    oldtermname = getenv("TERM");
     if (force && strcmp("linux", getenv("TERM"))) {
         /* Portability wins out here, apparently putenv is much more
            common on non-Linux than setenv */
@@ -685,9 +690,6 @@ int cmatrix_main(void *argument) {
         }
         napms(update * 10);
     }
-    syscmd = nmalloc(sizeof (char *) * (strlen(oldtermname) + 15));
-    sprintf(syscmd, "putenv TERM=%s", oldtermname);    
-    system(syscmd);
     // finish();
     return 0;
 }

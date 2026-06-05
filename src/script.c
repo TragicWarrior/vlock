@@ -171,8 +171,9 @@ timeout:
       goto error;
     }
 
-    /* Grow the data string. */
-    data = g_realloc(data, data_length+length);
+    /* Grow the data string.  Reserve one extra byte for the terminating NUL
+     * written after the loop, otherwise data[data_length] overflows by one. */
+    data = g_realloc(data, data_length+length+1);
 
     /* Append the buffer to the data string. */
     strncpy(data+data_length, buffer, length);
@@ -211,12 +212,6 @@ static void parse_dependency(char *data, GList **dependency_list)
   g_strfreev(dependency_items);
 }
 
-G_DEFINE_TYPE(VlockScript, vlock_script, TYPE_VLOCK_PLUGIN)
-
-#define VLOCK_SCRIPT_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj),\
-                                                                   TYPE_VLOCK_SCRIPT,\
-                                                                   VlockScriptPrivate))
-
 struct _VlockScriptPrivate
 {
   /* The path to the script. */
@@ -231,10 +226,12 @@ struct _VlockScriptPrivate
   pid_t pid;
 };
 
+G_DEFINE_TYPE_WITH_PRIVATE(VlockScript, vlock_script, TYPE_VLOCK_PLUGIN)
+
 /* Initialize plugin to default values. */
 static void vlock_script_init(VlockScript *self)
 {
-  self->priv = VLOCK_SCRIPT_GET_PRIVATE(self);
+  self->priv = vlock_script_get_instance_private(self);
 
   self->priv->dead = false;
   self->priv->launched = false;
@@ -370,8 +367,6 @@ static void vlock_script_class_init(VlockScriptClass *klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS(klass);
   VlockPluginClass *plugin_class = VLOCK_PLUGIN_CLASS(klass);
-
-  g_type_class_add_private(klass, sizeof(VlockScriptPrivate));
 
   /* Virtual methods. */
   gobject_class->finalize = vlock_script_finalize;

@@ -96,7 +96,7 @@ char *prompt(const char *msg, const struct timespec *timeout, GError **error)
     if (err != NULL) {
       g_propagate_error(error, err);
       goto out;
-    } else if (c == '\n') {
+    } else if (c == '\n' || c == '\r') {
       break;
     }
 
@@ -114,8 +114,9 @@ char *prompt(const char *msg, const struct timespec *timeout, GError **error)
                         VLOCK_PROMPT_ERROR_FAILED,
                         g_strerror(errno)));
 
-  /* Clear our buffer. */
-  memset(buffer, 0, sizeof buffer);
+  /* Clear our buffer.  Use explicit_bzero so the compiler cannot elide this
+   * scrub as a dead store (which it does at -O2). */
+  explicit_bzero(buffer, sizeof buffer);
 
 out:
   /* Restore original terminal attributes. */
@@ -203,8 +204,10 @@ before_select:
     }
   }
 
-  /* Read the character. */
-  (void) read(STDIN_FILENO, &c, 1);
+  /* Read the character.  Only trust c if exactly one byte was read; on EOF or
+   * error leave it 0, which callers treat as "no character". */
+  if (read(STDIN_FILENO, &c, 1) != 1)
+    c = 0;
 
 out:
   free(timeout_val);

@@ -36,12 +36,6 @@
 #include "plugin.h"
 #include "module.h"
 
-G_DEFINE_TYPE(VlockModule, vlock_module, TYPE_VLOCK_PLUGIN)
-
-#define VLOCK_MODULE_GET_PRIVATE(obj) (G_TYPE_INSTANCE_GET_PRIVATE((obj),\
-                                                                   TYPE_VLOCK_MODULE,\
-                                                                   VlockModulePrivate))
-
 /* A hook function as defined by a module. */
 typedef bool (*module_hook_function)(void **);
 
@@ -57,6 +51,8 @@ struct _VlockModulePrivate
    * order as the global hooks. */
   module_hook_function hooks[nr_hooks];
 };
+
+G_DEFINE_TYPE_WITH_PRIVATE(VlockModule, vlock_module, TYPE_VLOCK_PLUGIN)
 
 static bool vlock_module_open(VlockPlugin *plugin, GError **error)
 {
@@ -102,9 +98,13 @@ static bool vlock_module_open(VlockPlugin *plugin, GError **error)
     return false;
   }
 
-  /* Load all the hooks.  Unimplemented hooks are NULL and will not be called later. */
-  for (size_t i = 0; i < nr_hooks; i++)
-    *(void **)(&self->priv->hooks[i]) = dlsym(dl_handle, hooks[i].name);
+  /* Load all the hooks.  Unimplemented hooks are NULL and will not be called
+   * later.  Copy the void* from dlsym into the function pointer with memcpy to
+   * avoid a strict-aliasing violation. */
+  for (size_t i = 0; i < nr_hooks; i++) {
+    void *sym = dlsym(dl_handle, hooks[i].name);
+    memcpy(&self->priv->hooks[i], &sym, sizeof sym);
+  }
 
   /* Load all dependencies.  Unspecified dependencies are NULL. */
   for (size_t i = 0; i < nr_dependencies; i++) {
@@ -140,7 +140,7 @@ static bool vlock_module_call_hook(VlockPlugin *plugin, const gchar *hook_name)
 /* Initialize plugin to default values. */
 static void vlock_module_init(VlockModule *self)
 {
-  self->priv = VLOCK_MODULE_GET_PRIVATE(self);
+  self->priv = vlock_module_get_instance_private(self);
   self->priv->dl_handle = NULL;
 }
 
@@ -162,8 +162,6 @@ static void vlock_module_class_init(VlockModuleClass *klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS(klass);
   VlockPluginClass *plugin_class = VLOCK_PLUGIN_CLASS(klass);
-
-  g_type_class_add_private(klass, sizeof(VlockModulePrivate));
 
   /* Virtual methods. */
   gobject_class->finalize = vlock_module_finalize;

@@ -118,7 +118,8 @@ static int conversation(int num_msg, const struct pam_message **msg, struct
 fail:
   for (int i = 0; i < num_msg; ++i) {
     if (aresp[i].resp != NULL) {
-      memset(aresp[i].resp, 0, strlen(aresp[i].resp));
+      /* explicit_bzero so the password scrub is not optimized away. */
+      explicit_bzero(aresp[i].resp, strlen(aresp[i].resp));
       free(aresp[i].resp);
     }
   }
@@ -135,7 +136,7 @@ fail:
 bool auth(const char *user, struct timespec *timeout, GError **error)
 {
   char *pam_tty;
-  pam_handle_t *pamh;
+  pam_handle_t *pamh = NULL;
   int pam_status;
   int pam_end_status;
   struct conversation_data conv_data = {
@@ -153,12 +154,14 @@ bool auth(const char *user, struct timespec *timeout, GError **error)
   pam_status = pam_start("vlock", user, &pamc, &pamh);
 
   if (pam_status != PAM_SUCCESS) {
+    /* pam_start failed, so pamh was never created.  Do not pass it to
+     * pam_strerror/pam_end; pam_strerror ignores a NULL handle. */
     g_propagate_error(error,
                       g_error_new_literal(
                         VLOCK_AUTH_ERROR,
                         VLOCK_AUTH_ERROR_FAILED,
-                        pam_strerror(pamh, pam_status)));
-    goto end;
+                        pam_strerror(NULL, pam_status)));
+    return false;
   }
 
   /* get the name of stdin's tty device, if any */
