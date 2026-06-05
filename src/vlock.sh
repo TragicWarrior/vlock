@@ -46,6 +46,10 @@ VLOCK_VERSION="%VLOCK_VERSION%"
 # If set to "y" plugin support is enabled in vlock-main.
 VLOCK_ENABLE_PLUGINS="%VLOCK_ENABLE_PLUGINS%"
 
+# JSON configuration file, created with defaults on first run.
+VLOCK_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/vlock"
+VLOCK_CONFIG="${VLOCK_CONFIG_DIR}/config.json"
+
 print_help() {
   echo >&2 "vlock: locks virtual consoles, saving your current session."
   if [ "${VLOCK_ENABLE_PLUGINS}" = "yes" ] ; then
@@ -65,9 +69,36 @@ print_help() {
     echo >&2 "       prevent killing vlock with SAK"
     echo >&2 "-t <seconds> or --timeout <seconds>: run screen saver plugins"
     echo >&2 "       after the given amount of time."
+    echo >&2 "-S or --saver: start the screen saver plugins immediately instead"
+    echo >&2 "       of waiting for [ESC] or the timeout."
+    echo >&2 "--train-random: randomize the 'train' saver's vertical start"
+    echo >&2 "       position on each pass."
   fi
   echo >&2 "-v or --version: Print the version number of vlock and exit."
   echo >&2 "-h or --help: Print this help message and exit."
+  if [ "${VLOCK_ENABLE_PLUGINS}" = "yes" ] ; then
+    echo >&2 ""
+    echo >&2 "       [plugins...] are names of plugins to load.  Screen saver plugins"
+    echo >&2 "       paint the screen after the --timeout (-t) elapses or when you"
+    echo >&2 "       press [ESC]; the ones shipped by default are:"
+    echo >&2 "         cmatrix   falling \"Matrix\" characters"
+    echo >&2 "         train     an animated steam locomotive"
+    echo >&2 "       The all, new and nosysrq plugins also have option equivalents"
+    echo >&2 "       (-a, -n, -s).  Installed plugins live in %PREFIX%/lib/vlock/modules."
+    echo >&2 ""
+    echo >&2 "Examples:"
+    echo >&2 "       vlock -a                  lock all consoles"
+    echo >&2 "       vlock cmatrix             lock this console; Matrix saver on [ESC]"
+    echo >&2 "       vlock -a -t 10 cmatrix    lock all; start Matrix after 10s idle"
+    echo >&2 "       vlock -a -S cmatrix       lock all; start Matrix immediately"
+    echo >&2 "       vlock -a train            lock all; steam-train saver"
+    echo >&2 ""
+    echo >&2 "       Set VLOCK_PLUGINS (in the environment or ~/.vlockrc) to load"
+    echo >&2 "       plugins by default, e.g.  VLOCK_PLUGINS=\"cmatrix\""
+  fi
+  echo >&2 ""
+  echo >&2 "Configuration is read from ${VLOCK_CONFIG}"
+  echo >&2 "       (JSON; created on first run; needs jq; options override it)."
 }
 
 # Export variables only if they are set.  Some shells create an empty variable
@@ -79,6 +110,56 @@ export_if_set() {
     fi
     shift
   done
+}
+
+# Apply a config value as a default: set and export NAME=VALUE unless NAME is
+# already set, so command-line options and the environment win over the file.
+set_default() {
+  if eval "[ -z \"\${$1+x}\" ]" ; then
+    eval "$1=\"\$2\""
+  fi
+  eval "export $1"
+}
+
+# Create the config file with basic defaults on first run, then map its
+# "general" and per-module settings to VLOCK_* variables:
+#   general.<key>          -> VLOCK_<KEY>
+#   modules.<name>.<key>   -> VLOCK_<NAME>_<KEY>
+# Requires jq; without it the file is ignored and only options/environment apply.
+read_config() {
+  command -v jq >/dev/null 2>&1 || return 0
+
+  if [ ! -e "${VLOCK_CONFIG}" ] && mkdir -p "${VLOCK_CONFIG_DIR}" 2>/dev/null ; then
+    cat > "${VLOCK_CONFIG}" <<'EOF'
+{
+  "general": {
+    "wake_key": "any"
+  },
+  "modules": {
+    "train": {
+      "random": false
+    }
+  }
+}
+EOF
+  fi
+
+  [ -r "${VLOCK_CONFIG}" ] || return 0
+
+  if ! jq empty "${VLOCK_CONFIG}" >/dev/null 2>&1 ; then
+    echo >&2 "vlock: warning: ${VLOCK_CONFIG} is not valid JSON; ignoring it"
+    return 0
+  fi
+
+  eval "$(jq -r '
+    ((.general // {}) | to_entries[]
+      | select(.value | type | (. == "string" or . == "number" or . == "boolean"))
+      | "set_default VLOCK_\(.key|ascii_upcase|gsub("[^A-Z0-9_]";"_")) \(.value|tostring|@sh)"),
+    ((.modules // {}) | to_entries[] | select(.value | type == "object") | .key as $m
+      | .value | to_entries[]
+      | select(.value | type | (. == "string" or . == "number" or . == "boolean"))
+      | "set_default VLOCK_\($m|ascii_upcase|gsub("[^A-Z0-9_]";"_"))_\(.key|ascii_upcase|gsub("[^A-Z0-9_]";"_")) \(.value|tostring|@sh)")
+  ' "${VLOCK_CONFIG}")"
 }
 
 main() {
@@ -173,6 +254,14 @@ main() {
         plugins="${plugins} nosysrq"
         shift
         ;;
+      -S|--saver)
+        VLOCK_SAVER=y
+        shift
+        ;;
+      --train-random)
+        VLOCK_TRAIN_RANDOM=y
+        shift
+        ;;
       -t|--timeout)
         VLOCK_TIMEOUT="$2"
         if ! shift 2 ; then
@@ -221,8 +310,11 @@ main() {
     esac
   done
 
+  # Apply the configuration file (options parsed above take precedence).
+  read_config
+
   # Export variables for vlock-main.
-  export_if_set VLOCK_TIMEOUT VLOCK_PROMPT_TIMEOUT
+  export_if_set VLOCK_TIMEOUT VLOCK_PROMPT_TIMEOUT VLOCK_SAVER VLOCK_TRAIN_RANDOM
   export_if_set VLOCK_MESSAGE VLOCK_ALL_MESSAGE VLOCK_CURRENT_MESSAGE
 
   if [ "${VLOCK_ENABLE_PLUGINS}" = "yes" ] ; then

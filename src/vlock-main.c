@@ -52,6 +52,37 @@ static const char *auth_failure_blurb =
 
 static int auth_tries;
 
+#ifdef USE_PLUGINS
+/* Interpret an environment variable as a boolean (1/y/yes/true/on). */
+static bool env_is_true(const char *name)
+{
+  const char *v = getenv(name);
+
+  return v != NULL
+    && (strcmp(v, "1") == 0 || strcmp(v, "y") == 0 || strcmp(v, "Y") == 0
+        || strcmp(v, "yes") == 0 || strcmp(v, "true") == 0
+        || strcmp(v, "on") == 0);
+}
+
+/* Map VLOCK_WAKE_KEY to the set of characters that dismiss the screen saver.
+ * NULL means "any key". */
+static const char *wake_key_charset(void)
+{
+  const char *k = getenv("VLOCK_WAKE_KEY");
+
+  if (k == NULL || strcmp(k, "any") == 0)
+    return NULL;
+  else if (strcmp(k, "enter") == 0 || strcmp(k, "return") == 0)
+    return "\n\r";
+  else if (strcmp(k, "space") == 0)
+    return " ";
+  else if (strcmp(k, "backspace") == 0)
+    return "\b\177";
+  else
+    return NULL;
+}
+#endif
+
 static void auth_loop(const char *username)
 {
   GError *err = NULL;
@@ -81,6 +112,11 @@ static void auth_loop(const char *username)
   prompt_timeout = parse_seconds(getenv("VLOCK_PROMPT_TIMEOUT"));
 #ifdef USE_PLUGINS
   wait_timeout = parse_seconds(getenv("VLOCK_TIMEOUT"));
+  /* When VLOCK_SAVER is true, start the screen saver plugins immediately
+   * instead of waiting for ESC or the timeout. */
+  bool saver_only = env_is_true("VLOCK_SAVER");
+  /* Which key(s) dismiss the saver (VLOCK_WAKE_KEY); NULL means any key. */
+  const char *wake_charset = wake_key_charset();
 #else
   wait_timeout = NULL;
 #endif
@@ -94,20 +130,24 @@ static void auth_loop(const char *username)
       fputc('\n', stderr);
     }
 
-    /* Wait for enter or escape to be pressed. */
-    c = wait_for_character("\n\033", wait_timeout, NULL);
+    /* Wait for enter or escape to be pressed.  In saver mode start the screen
+     * saver immediately by acting as if ESC had been pressed. */
+#ifdef USE_PLUGINS
+    if (saver_only)
+      c = '\033';
+    else
+#endif
+      c = wait_for_character("\n\r\033", wait_timeout, NULL);
 
     /* Escape was pressed or the timeout occurred. */
     if (c == '\033' || c == 0) {
 #ifdef USE_PLUGINS
       plugin_hook("vlock_save");
-      /* Wait for any key to be pressed. */
-      c = wait_for_character(NULL, NULL, NULL);
+      /* Wait for the configured wake key (any key by default). */
+      (void) wait_for_character(wake_charset, NULL, NULL);
       plugin_hook("vlock_save_abort");
 
-      /* Do not require enter to be pressed twice. */
-      if (c != '\n')
-        continue;
+      /* Any key dismisses the saver and brings up the password prompt. */
 #else
       continue;
 #endif
@@ -171,7 +211,11 @@ int main(int argc, char *const argv[])
 
   /* Initialize GLib. */
   g_set_prgname(argv[0]);
+  /* The GType system initializes itself automatically since GLib 2.36;
+   * g_type_init() is a deprecated no-op there. */
+#if !GLIB_CHECK_VERSION(2, 36, 0)
   g_type_init();
+#endif
 
   /* Initialize logging. */
   vlock_initialize_logging();

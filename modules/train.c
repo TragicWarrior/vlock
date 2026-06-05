@@ -30,6 +30,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <time.h>
 
 #include <ncurses.h>
 
@@ -50,7 +51,23 @@ int LOGO      = 0;
 int FLY       = 0;
 int C51       = 0;
 
+/* Random value chosen once per pass to vary the train's vertical position. */
+static int train_rnd = 0;
+/* Whether vertical randomization is enabled (set from VLOCK_TRAIN_RANDOM). */
+static int train_random = 0;
+
 static int train_main(void *argument);
+
+/* Interpret an environment variable as a boolean (1/y/yes/true/on). */
+static bool env_is_true(const char *name)
+{
+    const char *v = getenv(name);
+
+    return v != NULL
+        && (strcmp(v, "1") == 0 || strcmp(v, "y") == 0 || strcmp(v, "Y") == 0
+            || strcmp(v, "yes") == 0 || strcmp(v, "true") == 0
+            || strcmp(v, "on") == 0);
+}
 
 bool vlock_save(void **ctx_ptr)
 {
@@ -108,8 +125,22 @@ train_main(void *argument)
 
     (void)argument;
 
+    /* Vertical-position randomization is opt-in via the VLOCK_TRAIN_RANDOM
+     * environment variable (set by vlock's --train-random option). */
+    train_random = env_is_true("VLOCK_TRAIN_RANDOM");
+
+    if (train_random)
+        srand((unsigned) time(NULL));
+
     do
     {
+        if (train_random) {
+            /* New random vertical position each pass; clear the screen so the
+             * previous pass (at a different height) leaves no trail. */
+            train_rnd = rand();
+            erase();
+        }
+
         for (x = COLS - 1; ; --x) {
             if (LOGO == 1) {
                 if (add_sl(x) == ERR) break;
@@ -151,7 +182,16 @@ int add_sl(int x)
     int i, y, py1 = 0, py2 = 0, py3 = 0;
 
     if (x < - LOGOLENGTH)  return ERR;
-    y = LINES / 2 - 3;
+
+    if (train_random) {
+        /* Random vertical start, fixed for the whole pass via train_rnd, kept
+         * fully on screen with the top row left for smoke. */
+        int min_y = 1;
+        int max_y = LINES - 1 - LOGOHEIGHT;
+        y = (max_y < min_y) ? 0 : min_y + train_rnd % (max_y - min_y + 1);
+    } else {
+        y = LINES / 2 - 3;
+    }
 
     if (FLY == 1) {
         y = (x / 6) + LINES - (COLS / 6) - LOGOHEIGHT;
@@ -194,7 +234,16 @@ int add_D51(int x)
     int y, i, dy = 0;
 
     if (x < - D51LENGTH)  return ERR;
-    y = LINES / 2 - 5;
+
+    if (train_random) {
+        /* Random vertical start, fixed for the whole pass via train_rnd, kept
+         * fully on screen with the top row left for smoke. */
+        int min_y = 1;
+        int max_y = LINES - 1 - D51HEIGHT;
+        y = (max_y < min_y) ? 0 : min_y + train_rnd % (max_y - min_y + 1);
+    } else {
+        y = LINES / 2 - 5;
+    }
 
     if (FLY == 1) {
         y = (x / 7) + LINES - (COLS / 7) - D51HEIGHT;
@@ -234,7 +283,16 @@ int add_C51(int x)
     int y, i, dy = 0;
 
     if (x < - C51LENGTH)  return ERR;
-    y = LINES / 2 - 5;
+
+    if (train_random) {
+        /* Random vertical start, fixed for the whole pass via train_rnd, kept
+         * fully on screen with the top row left for smoke. */
+        int min_y = 1;
+        int max_y = LINES - 1 - C51HEIGHT;
+        y = (max_y < min_y) ? 0 : min_y + train_rnd % (max_y - min_y + 1);
+    } else {
+        y = LINES / 2 - 5;
+    }
 
     if (FLY == 1) {
         y = (x / 7) + LINES - (COLS / 7) - C51HEIGHT;
@@ -298,6 +356,11 @@ void add_smoke(int y, int x)
             S[i].ptrn += (S[i].ptrn < SMOKEPTNS - 1) ? 1 : 0;
             my_mvaddstr(S[i].y, S[i].x, Smoke[S[i].kind][S[i].ptrn]);
         }
+        /* The screensaver runs indefinitely, so sum would otherwise grow
+         * without bound and overflow the fixed-size S[] array (corrupting
+         * adjacent statics).  Recycle the buffer once it fills. */
+        if (sum >= (int) (sizeof S / sizeof S[0]))
+            sum = 0;
         my_mvaddstr(y, x, Smoke[sum % 2][0]);
         S[sum].y = y;    S[sum].x = x;
         S[sum].ptrn = 0; S[sum].kind = sum % 2;
