@@ -1,10 +1,10 @@
-.TH VLOCK 1 "28 July 2007" "Linux" "Linux User's Manual"
+.TH VLOCK 1 "29 May 2026" "Linux" "Linux User's Manual"
 .SH NAME
 vlock \- Virtual Console lock program
 .SH SYNOPSIS
 .B vlock [ -hv ]
 .PP
-.B vlock [ -acns ] [ -t <timeout> ] [ plugins... ]
+.B vlock [ -acnsS ] [ -t <timeout> ] [ plugins... ]
 .SH DESCRIPTION
 .B vlock
 is a program to lock one or more sessions on the Linux console.  This is
@@ -36,6 +36,13 @@ to an empty virtual console to lock the display.
 The options \fB-n,--new\fR, \fB-s,--disable-sysrq\fR, and \fB-t,--timeout\fR
 only work if vlock is compiled with plugin support.  See the PLUGINS section
 for more information.
+.PP
+With plugin support vlock can also run a screen saver while the console is
+locked.  Name a screen saver plugin (such as \fBcmatrix\fR or \fBtrain\fR) on
+the command line; it starts when you press [ESC], after the \fB-t,--timeout\fR
+period of inactivity, or immediately with \fB-S,--saver\fR.  Pressing the wake
+key (any key by default) brings up the password prompt.  See vlock-plugins(5)
+for the available screen savers and how to configure them.
 .SH OPTIONS
 .B -a,--all
 .IP
@@ -58,6 +65,12 @@ if the \fB-a,--all\fR option given.
 .IP
 Specify the timeout for the screensaver plugins.  See vlock-plugins(5) for more
 information.
+.PP
+.B -S,--saver
+.IP
+Start the screen saver plugins immediately instead of waiting for [ESC] or the
+\fB-t,--timeout\fR period.  Has no effect unless a screen saver plugin is
+loaded.
 .PP
 .B -h,--help
 .IP
@@ -104,6 +117,16 @@ saver plugins (if any) will be invoked.  If this variable is unset or set to an
 invalid value or 0 no timeout is used.  See vlock-plugins(5) for more
 information about plugins.
 .PP
+.B VLOCK_SAVER
+.IP
+If set to a true value (1, y, yes, true or on) the screen saver plugins are
+started immediately, as with \fB-S,--saver\fR.
+.PP
+.B VLOCK_WAKE_KEY
+.IP
+Selects which key dismisses the screen saver and brings up the password prompt.
+One of \fBany\fR (the default), \fBenter\fR, \fBspace\fR or \fBbackspace\fR.
+.PP
 .B VLOCK_PROMPT_TIMEOUT
 .IP
 Set this variable to specify the amount of time (in seconds) you will
@@ -112,11 +135,38 @@ resets the timeout.  If this variable is unset or set to an invalid
 value or 0 no timeout is used.  \fBWarning\fR: If this value is too
 low, you may not be able to unlock your session.
 .PP
+.B VLOCK_TRAIN_RANDOM
+.IP
+If set to a true value the \fBtrain\fR screen saver randomizes its vertical
+start position on each pass.
+.PP
+.B VLOCK_CMATRIX_COLOR
+.IP
+Selects the color of the \fBcmatrix\fR screen saver: \fBgreen\fR (the default),
+\fBred\fR, \fBblue\fR, \fBwhite\fR, \fByellow\fR, \fBcyan\fR, \fBmagenta\fR,
+\fBblack\fR or \fBrainbow\fR.
+.PP
+.B VLOCK_CMATRIX_BOLD
+.IP
+Sets how the \fBcmatrix\fR screen saver uses bold: \fB0\fR none (the default),
+\fB1\fR partial, or \fB2\fR all characters bold.
+.PP
 .SH FILES
 .B ~/.vlockrc
 .IP
 This file is read by \fBvlock\fR on startup if it exists.  All the variables
 mentioned above can be set here.
+.PP
+.B ~/.config/vlock/config.json
+.IP
+Optional JSON configuration file, created with defaults on first run (this
+requires \fBjq\fR).  It has a \fBgeneral\fR section and a per-module
+\fBmodules\fR section.  A key under \fBgeneral\fR sets the corresponding
+\fBVLOCK_\fR variable, and a key under \fBmodules.<plugin>\fR sets
+\fBVLOCK_<PLUGIN>_\fR; e.g. \fBgeneral.wake_key\fR becomes \fBVLOCK_WAKE_KEY\fR
+and \fBmodules.cmatrix.color\fR becomes \fBVLOCK_CMATRIX_COLOR\fR.  Command line
+options and environment variables take precedence over the file.  See
+vlock-plugins(5) for the per-plugin keys.
 .SH SECURITY
 See the SECURITY file in the \fBvlock\fR distribution for more information.
 .PP

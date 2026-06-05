@@ -1,4 +1,4 @@
-.TH VLOCK-PLUGINS 5 "10 November 2007" "Linux" "Linux Programmer's Manual"
+.TH VLOCK-PLUGINS 5 "29 May 2026" "Linux" "Linux Programmer's Manual"
 .SH NAME
 vlock-plugins \- plugin support for vlock
 .SH DESCRIPTION
@@ -29,12 +29,68 @@ Linux only.  This plugin disables the Linux SysRQ mechanism before the console
 switching is locked by the "all" plugin.  It is also loaded when giving the
 \fB-s,--disable-sysrq\fR option to vlock(1).
 .PP
+.SH "SCREEN SAVER PLUGINS"
+On Linux the following screen saver plugins are also built and installed by
+default.  A screen saver runs while the console is locked: it starts when you
+press [ESC], after the \fB-t,--timeout\fR period of inactivity (see vlock(1)),
+or immediately when \fB-S,--saver\fR is given.  Pressing the wake key brings up
+the password prompt.
+.PP
+.B cmatrix
+.IP
+Displays falling "Matrix" characters.  Its color is configurable; see
+CONFIGURATION below.
+.PP
+.B train
+.IP
+Displays an animated steam locomotive.
+.PP
 .SH "ADDITIONAL PLUGINS"
 The following plugins are only available if explicitely selected at build time:
 .PP
 .B caca
 .IP
 This plugin runs a random libcaca screensaver when the screen is locked.
+.SH CONFIGURATION
+Screen saver behavior is controlled through the JSON configuration file
+described in vlock(1) (\fI~/.config/vlock/config.json\fR) or the equivalent
+environment variables.  The relevant keys are:
+.PP
+.B general.wake_key
+.IP
+Which key dismisses the screen saver: \fBany\fR (the default), \fBenter\fR,
+\fBspace\fR or \fBbackspace\fR.  Maps to \fBVLOCK_WAKE_KEY\fR.
+.PP
+.B modules.cmatrix.color
+.IP
+Color of the cmatrix saver: \fBgreen\fR (the default), \fBred\fR, \fBblue\fR,
+\fBwhite\fR, \fByellow\fR, \fBcyan\fR, \fBmagenta\fR, \fBblack\fR or
+\fBrainbow\fR.  Maps to \fBVLOCK_CMATRIX_COLOR\fR.
+.PP
+.B modules.cmatrix.bold
+.IP
+Bold level of the cmatrix saver: \fB0\fR none (the default), \fB1\fR partial or
+\fB2\fR all.  Maps to \fBVLOCK_CMATRIX_BOLD\fR.
+.PP
+.B modules.train.random
+.IP
+If true, the train saver randomizes its vertical start position on each pass.
+Maps to \fBVLOCK_TRAIN_RANDOM\fR.
+.PP
+A complete example (note the commas between entries; if the file is not valid
+JSON it is ignored entirely):
+.PP
+.RS
+.nf
+{
+  "general": { "wake_key": "any" },
+  "modules": {
+    "cmatrix": { "color": "rainbow", "bold": 2 },
+    "train":   { "random": true }
+  }
+}
+.fi
+.RE
 .SH WRITING PLUGINS
 For information about writing plugins see the PLUGINS file in the vlock source
 distribution.

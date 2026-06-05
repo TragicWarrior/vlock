@@ -43,4 +43,14 @@ To make vlock switch to a new console before locking, use the -n or
 an X11 session.  The -n flag implies -a and thus all warnings about -a
 also apply to -n.
 
+vlock can also run a screen saver while the console is locked.  Name a
+screen saver plugin on the command line -- "vlock cmatrix" for falling
+Matrix characters or "vlock train" for a steam locomotive.  The saver
+starts when you press ESC, after the --timeout (-t) period, or
+immediately with -S; press a key to bring up the password prompt.
+
+Defaults such as the wake key and the cmatrix color are read from the
+JSON configuration file ~/.config/vlock/config.json, which is created
+on first run.  See vlock(1) and vlock-plugins(5) for the details.
+
 vlock is maintained by Frank Benkstein <frank-vlock@benkstein.net>.
