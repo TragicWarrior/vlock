@@ -19,21 +19,10 @@ set -e
 # Magic characters to clear the terminal.
 CLEAR_SCREEN="`echo -e '\033[H\033[J'`"
 
-# Enter message that is common to different the messages.
-VLOCK_ENTER_PROMPT="Please press [ENTER] to unlock."
-
-# Message that is displayed when console switching is disabled.
-VLOCK_ALL_MESSAGE="${CLEAR_SCREEN}\
-The entire console display is now completely locked.
-You will not be able to switch to another virtual console.
-
-${VLOCK_ENTER_PROMPT}"
-
-# Message that is displayed when only the current terminal is locked.
-VLOCK_CURRENT_MESSAGE="${CLEAR_SCREEN}\
-This TTY is now locked.
-
-${VLOCK_ENTER_PROMPT}"
+# The lock messages (VLOCK_ENTER_PROMPT, VLOCK_ALL_MESSAGE and
+# VLOCK_CURRENT_MESSAGE) are composed later by build_messages(), once the saver
+# mode and wake key are known.  Pre-set any of them here or in ~/.vlockrc to
+# override the defaults.
 
 # Read user settings.
 if [ -r "${HOME}/.vlockrc" ] ; then
@@ -160,6 +149,47 @@ EOF
       | select(.value | type | (. == "string" or . == "number" or . == "boolean"))
       | "set_default VLOCK_\($m|ascii_upcase|gsub("[^A-Z0-9_]";"_"))_\(.key|ascii_upcase|gsub("[^A-Z0-9_]";"_")) \(.value|tostring|@sh)")
   ' "${VLOCK_CONFIG}")"
+}
+
+# Human-readable name of the configured wake key (VLOCK_WAKE_KEY), matching the
+# keys that vlock-main actually accepts to dismiss the screen saver.
+wake_key_label() {
+  case "${VLOCK_WAKE_KEY:-any}" in
+    enter|return) echo "[ENTER]" ;;
+    space)        echo "the space bar" ;;
+    backspace)    echo "[BACKSPACE]" ;;
+    *)            echo "any key" ;;
+  esac
+}
+
+# Compose the lock messages unless the user already supplied their own.  The
+# unlock instruction depends on how the password prompt is reached: in immediate
+# saver mode (-S) the saver is already on screen and the wake key brings up the
+# prompt, so name that key; otherwise [ENTER] does.
+build_messages() {
+  if [ -z "${VLOCK_ENTER_PROMPT+set}" ] ; then
+    case "${VLOCK_SAVER:-}" in
+      1|y|Y|yes|true|on)
+        VLOCK_ENTER_PROMPT="Please press $(wake_key_label) to unlock." ;;
+      *)
+        VLOCK_ENTER_PROMPT="Please press [ENTER] to unlock." ;;
+    esac
+  fi
+
+  if [ -z "${VLOCK_ALL_MESSAGE+set}" ] ; then
+    VLOCK_ALL_MESSAGE="${CLEAR_SCREEN}\
+The entire console display is now completely locked.
+You will not be able to switch to another virtual console.
+
+${VLOCK_ENTER_PROMPT}"
+  fi
+
+  if [ -z "${VLOCK_CURRENT_MESSAGE+set}" ] ; then
+    VLOCK_CURRENT_MESSAGE="${CLEAR_SCREEN}\
+This TTY is now locked.
+
+${VLOCK_ENTER_PROMPT}"
+  fi
 }
 
 main() {
@@ -312,6 +342,9 @@ main() {
 
   # Apply the configuration file (options parsed above take precedence).
   read_config
+
+  # Compose the lock messages now that the saver mode and wake key are known.
+  build_messages
 
   # Export variables for vlock-main.
   export_if_set VLOCK_TIMEOUT VLOCK_PROMPT_TIMEOUT VLOCK_SAVER VLOCK_TRAIN_RANDOM
