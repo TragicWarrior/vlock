@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(vlock VERSION 2.3.0 LANGUAGES C)
+project(vlock VERSION 2.9.9 LANGUAGES C)
 
 #=============================================================================
 # Configuration options (mirror the old ./configure / config.mk knobs)
