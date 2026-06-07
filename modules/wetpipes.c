@@ -151,6 +151,13 @@ draw_sprite(const sprite_t *s)
 
 #define BRICK_ROWS              2       /* one complete BTEE/TTEE tile
                                            = one visible layer of bricks */
+#define BRICK_PERIOD            4       /* one repeat of the per-row tile:
+                                           TTEE, HLINE, BTEE, HLINE.  Row 1
+                                           is shifted by BRICK_PERIOD/2 so
+                                           the row-0 TTEE aligns with the
+                                           row-1 BTEE, forming a continuous
+                                           vertical mortar between the two
+                                           horizontal mortar lines. */
 #define PIPE_HEIGHT_FRACTION    30      /* percent of LINES */
 #define MIN_PIPE_HEIGHT         4       /* 2 flange rows + min 2 shaft rows */
 #define FLANGE_ROWS             2
@@ -570,20 +577,33 @@ compute_pipes(void)
 static void
 draw_bricks(WINDOW *win, int brick_top)
 {
-    /* Small Bricks tile, identical to vwm's wallpaper rendering:
-       BTEE at (y%2)==(x%2), TTEE otherwise.  Use the legacy ACS_*
-       chtype constants so the module links against plain ncurses
-       (no ncursesw dependency for WACS_*). */
-    int colors = COLOR_PAIR(PAIR_BRICK) | A_ALTCHARSET;
-    int y, x;
+    /* Per-row tile: TTEE, HLINE, BTEE, HLINE, repeating with period
+       BRICK_PERIOD.  Row 0 is unshifted; row 1 is offset by half a
+       brick (BRICK_PERIOD/2 cells) so the row-0 TTEE sits directly
+       above the row-1 BTEE -- their half-stubs meet at the row
+       boundary and form a continuous vertical mortar between the
+       two horizontal mortar lines.  The BTEE in row 0 and TTEE in
+       row 1 at the offset positions produce small outward stubs at
+       the top/bottom of the brick layer, hinting at the staggered
+       courses above and below. */
+    int      colors = COLOR_PAIR(PAIR_BRICK) | A_ALTCHARSET;
+    chtype   tile[BRICK_PERIOD] = {
+        ACS_TTEE,
+        ACS_HLINE,
+        ACS_BTEE,
+        ACS_HLINE,
+    };
+    int      y, x;
 
     wattron(win, colors);
     for(y = 0; y < BRICK_ROWS; y++)
     {
+        int phase = (y == 0) ? 0 : BRICK_PERIOD / 2;
+
         for(x = 0; x < COLS; x++)
         {
-            chtype ch = ((y & 1) == (x & 1)) ? ACS_BTEE : ACS_TTEE;
-            mvwaddch(win, brick_top + y, x, ch);
+            mvwaddch(win, brick_top + y, x,
+                     tile[(x + phase) % BRICK_PERIOD]);
         }
     }
     wattroff(win, colors);
