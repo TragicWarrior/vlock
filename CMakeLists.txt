@@ -28,6 +28,8 @@ set(MODULEDIR "${CMAKE_INSTALL_FULL_LIBDIR}/vlock/modules"
     CACHE PATH "Directory where plugin modules are installed")
 set(SCRIPTDIR "${CMAKE_INSTALL_FULL_LIBDIR}/vlock/scripts"
     CACHE PATH "Directory where plugin scripts are installed")
+set(VLOCK_CONFIG_TOOL "${CMAKE_INSTALL_FULL_LIBDIR}/vlock/vlock-config"
+    CACHE PATH "Installed path of the JSON-config helper")
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Build type" FORCE)
@@ -124,12 +126,31 @@ add_custom_command(
     -DPREFIX=${CMAKE_INSTALL_PREFIX}
     -DVLOCK_VERSION=${PROJECT_VERSION}
     -DVLOCK_ENABLE_PLUGINS=${VLOCK_ENABLE_PLUGINS}
+    -DVLOCK_CONFIG_TOOL=${VLOCK_CONFIG_TOOL}
     -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateWrapper.cmake
   DEPENDS src/vlock.sh cmake/GenerateWrapper.cmake
   COMMENT "Generating vlock wrapper script"
   VERBATIM
 )
 add_custom_target(vlock-wrapper ALL DEPENDS "${VLOCK_WRAPPER}")
+
+#=============================================================================
+# vlock-config (JSON->shell helper used by the wrapper at runtime)
+#=============================================================================
+
+add_executable(vlock-config
+  src/vlock-config.c
+  src/cJSON.c
+)
+target_include_directories(vlock-config PRIVATE src)
+# cJSON.c is a third-party vendored file; silence its style/pedantic
+# warnings so they don't pollute -Wall -Wextra -pedantic output.
+set_source_files_properties(src/cJSON.c PROPERTIES
+  COMPILE_OPTIONS "-w")
+
+install(TARGETS vlock-config
+  RUNTIME DESTINATION "${CMAKE_INSTALL_LIBDIR}/vlock"
+)
 
 #=============================================================================
 # Plugins (modules)

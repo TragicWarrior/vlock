@@ -114,9 +114,10 @@ set_default() {
 # "general" and per-module settings to VLOCK_* variables:
 #   general.<key>          -> VLOCK_<KEY>
 #   modules.<name>.<key>   -> VLOCK_<NAME>_<KEY>
-# Requires jq; without it the file is ignored and only options/environment apply.
+# The translation is done by the bundled vlock-config helper; if it isn't
+# installed the file is ignored and only options/environment apply.
 read_config() {
-  command -v jq >/dev/null 2>&1 || return 0
+  [ -x "%VLOCK_CONFIG_TOOL%" ] || return 0
 
   if [ ! -e "${VLOCK_CONFIG}" ] && mkdir -p "${VLOCK_CONFIG_DIR}" 2>/dev/null ; then
     cat > "${VLOCK_CONFIG}" <<'EOF'
@@ -140,20 +141,7 @@ EOF
 
   [ -r "${VLOCK_CONFIG}" ] || return 0
 
-  if ! jq empty "${VLOCK_CONFIG}" >/dev/null 2>&1 ; then
-    echo >&2 "vlock: warning: ${VLOCK_CONFIG} is not valid JSON; ignoring it"
-    return 0
-  fi
-
-  eval "$(jq -r '
-    ((.general // {}) | to_entries[]
-      | select(.value | type | (. == "string" or . == "number" or . == "boolean"))
-      | "set_default VLOCK_\(.key|ascii_upcase|gsub("[^A-Z0-9_]";"_")) \(.value|tostring|@sh)"),
-    ((.modules // {}) | to_entries[] | select(.value | type == "object") | .key as $m
-      | .value | to_entries[]
-      | select(.value | type | (. == "string" or . == "number" or . == "boolean"))
-      | "set_default VLOCK_\($m|ascii_upcase|gsub("[^A-Z0-9_]";"_"))_\(.key|ascii_upcase|gsub("[^A-Z0-9_]";"_")) \(.value|tostring|@sh)")
-  ' "${VLOCK_CONFIG}")"
+  eval "$("%VLOCK_CONFIG_TOOL%" "${VLOCK_CONFIG}")"
 }
 
 # Human-readable name of the configured wake key (VLOCK_WAKE_KEY), matching the

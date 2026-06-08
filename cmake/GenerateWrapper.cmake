@@ -6,6 +6,7 @@ string(REPLACE "%BOURNE_SHELL%" "${BOURNE_SHELL}" _contents "${_contents}")
 string(REPLACE "%PREFIX%" "${PREFIX}" _contents "${_contents}")
 string(REPLACE "%VLOCK_VERSION%" "${VLOCK_VERSION}" _contents "${_contents}")
 string(REPLACE "%VLOCK_ENABLE_PLUGINS%" "${VLOCK_ENABLE_PLUGINS}" _contents "${_contents}")
+string(REPLACE "%VLOCK_CONFIG_TOOL%" "${VLOCK_CONFIG_TOOL}" _contents "${_contents}")
 file(WRITE "${OUT}" "${_contents}")
 
 # Syntax-check the generated script (was: $(BOURNE_SHELL) -n vlock.sh).
