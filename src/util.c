@@ -35,7 +35,7 @@ struct timespec *parse_seconds(const char *s)
     return NULL;
   else {
     char *n;
-    struct timespec *t = calloc(sizeof *t, 1);
+    struct timespec *t = calloc(1, sizeof *t);
 
     if (t == NULL)
       return NULL;

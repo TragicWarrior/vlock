@@ -172,7 +172,7 @@ char read_character(const struct timespec *timeout, GError **error)
 
 before_select:
   if (timeout != NULL) {
-    timeout_val = calloc(sizeof *timeout_val, 1);
+    timeout_val = calloc(1, sizeof *timeout_val);
 
     if (timeout_val != NULL) {
       timeout_val->tv_sec = timeout->tv_sec;
