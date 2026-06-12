@@ -87,7 +87,7 @@ print_help() {
   fi
   echo >&2 ""
   echo >&2 "Configuration is read from ${VLOCK_CONFIG}"
-  echo >&2 "       (JSON; created on first run; needs jq; options override it)."
+  echo >&2 "       (JSON; created on first run; options override it)."
 }
 
 # Export variables only if they are set.  Some shells create an empty variable
