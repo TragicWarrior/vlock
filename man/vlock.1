@@ -79,6 +79,12 @@ to wake.''  Every <seconds> the box jumps to a new random position on screen.
 A value of 0 (the default) disables it.  Supported by the \fBcmatrix\fR and
 \fBtrain\fR savers.
 .PP
+.B --ascii
+.IP
+Use plain ASCII/ACS characters for the \fBnetware\fR saver instead of
+multi-byte glyphs (sets \fBVLOCK_ASCII\fR); useful on terminals that do not
+support UTF-8 or when an ASCII-only display is desired.
+.PP
 .B -h,--help
 .IP
 Print a brief help message.
@@ -116,6 +122,12 @@ instead of the default.  This overrides the former two variables.
 If this variable is set it is interpreted as a space separated list of plugins
 that will be loaded when vlock starts additionally to the ones listed on the
 command line.
+.PP
+.B VLOCK_ASCII
+.IP
+Force the \fBnetware\fR saver to use plain ASCII/ACS characters for its body
+instead of multi-byte glyphs; true values are 1, y, yes, true, or on (case
+insensitive).  The command-line \fB--ascii\fR option sets this variable.
 .PP
 .B VLOCK_TIMEOUT
 .IP

@@ -46,6 +46,13 @@ CONFIGURATION below.
 .IP
 Displays an animated steam locomotive.
 .PP
+.B netware
+.IP
+CPU util-driven "worms" that wander the screen in eight directions; segment
+length grows with system load.  Colours rotate across pseudo-random ncurses
+pairs.  Supports the \fB--ascii\fR option (or \fBVLOCK_ASCII\fR for plain
+ASCII/ACS body characters instead of multi-byte glyphs).
+.PP
 .SH "ADDITIONAL PLUGINS"
 The following plugins are only available if explicitely selected at build time:
 .PP
@@ -83,6 +90,18 @@ Bold level of the cmatrix saver: \fB0\fR none (the default), \fB1\fR partial or
 .IP
 If true, the train saver randomizes its vertical start position on each pass.
 Maps to \fBVLOCK_TRAIN_RANDOM\fR.
+.PP
+.SH "NETWARE-SAVER ASCII MODE"
+The \fBnetware\fR saver respects an ASCII-only mode that suppresses
+multi-byte glyphs in favour of plain ASCII characters (useful on terminals
+that do not support UTF-8):
+.PP
+.B general.ascii
+.IP
+Boolean.  When true, the netware saver draws its worm bodies with plain '#'
+characters and replaces the ACS_CKBOARD dim segments with plain '#'.  True
+values are 1, y, yes, true or on (case-insensitive).  Maps to \fBVLOCK_ASCII\fR,
+settable via the \fB--ascii\fR command-line flag in vlock(1).
 .PP
 A complete example (note the commas between entries; if the file is not valid
 JSON it is ignored entirely):

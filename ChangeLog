@@ -3,6 +3,9 @@
     vlock 2.2.4
 
     * Ported cmatrix as a screensaver
+    * Add netware saver ASCII-only mode (--ascii flag, VLOCK_ASCII env,
+      general.ascii JSON key) to use plain ACS/ASCII characters instead of
+      multi-byte glyphs on terminals without UTF-8 support
 
 2018-01-25 Bryan Christ <bryan.christ@gmail.com>
 

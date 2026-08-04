@@ -17,6 +17,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <sys/ioctl.h>
 
 #include <ncurses.h>
@@ -201,6 +202,8 @@ bool vlock_save(void **ctx_ptr)
         .stderr_fd = NO_REDIRECT,
     };
     GError *tmp_error = NULL;
+
+    setlocale(LC_ALL, "");
 
     initscr();
     savetty();

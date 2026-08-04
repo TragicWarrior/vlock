@@ -1,12 +1,16 @@
 # Plugin modules.  Each is a shared object dlopen'd by vlock-main; undefined
 # symbols (console_switch, etc.) are resolved against vlock-main at load time.
 
-pkg_check_modules(NCURSES IMPORTED_TARGET ncurses)
+pkg_check_modules(NCURSES IMPORTED_TARGET ncursesw)
+if (NOT NCURSES_FOUND)
+  pkg_check_modules(NCURSES IMPORTED_TARGET ncurses)
+endif()
 
 # Per-module extra link libraries.
 set(_libs_train    PkgConfig::NCURSES)
 set(_libs_cmatrix  PkgConfig::NCURSES)
 set(_libs_wetpipes PkgConfig::NCURSES)
+set(_libs_netware  PkgConfig::NCURSES)
 set(_libs_caca     PkgConfig::NCURSES caca)
 
 # Per-module extra sources.  The screen savers share the info-box overlay.
