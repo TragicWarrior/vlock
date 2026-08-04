@@ -33,6 +33,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <signal.h>
 
 #include <ncurses.h>
@@ -95,6 +96,8 @@ bool vlock_save(void **ctx_ptr)
   };
 
   /* Initialize ncurses. */
+  setlocale(LC_ALL, "");
+
   initscr();
 
   if (!create_child(&child))
@@ -583,7 +586,7 @@ static void draw_ball(uint8_t *screen, unsigned int bx, unsigned int by)
     }
 }
 
-/* The moiré effect */
+/* The moirï¿½ effect */
 #define DISCSIZ (XSIZ*2)
 #define DISCTHICKNESS (XSIZ*15/40)
 static uint8_t disc[DISCSIZ * DISCSIZ];

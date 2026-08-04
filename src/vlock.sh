@@ -62,6 +62,8 @@ print_help() {
     echo >&2 "       of waiting for [ESC] or the timeout."
     echo >&2 "--info-box <seconds>: show a roaming \"press a key to wake\" box on"
     echo >&2 "       the screen saver, moving every <seconds> (0 disables it)."
+    echo >&2 "--ascii: use plain ASCII/ACS characters for the netware saver instead"
+    echo >&2 "       of UTF-8 multi-byte glyphs"
   fi
   echo >&2 "-v or --version: Print the version number of vlock and exit."
   echo >&2 "-h or --help: Print this help message and exit."
@@ -124,7 +126,8 @@ read_config() {
 {
   "general": {
     "wake_key": "any",
-    "info_box": 0
+    "info_box": 0,
+    "ascii": false
   },
   "modules": {
     "cmatrix": {
@@ -281,6 +284,10 @@ main() {
         VLOCK_SAVER=y
         shift
         ;;
+      --ascii)
+        export VLOCK_ASCII=y
+        shift
+        ;;
       -t|--timeout)
         VLOCK_TIMEOUT="$2"
         if ! shift 2 ; then
@@ -344,6 +351,7 @@ main() {
 
   # Export variables for vlock-main.
   export_if_set VLOCK_TIMEOUT VLOCK_PROMPT_TIMEOUT VLOCK_SAVER VLOCK_TRAIN_RANDOM
+  export_if_set VLOCK_ASCII
   export_if_set VLOCK_CMATRIX_COLOR VLOCK_CMATRIX_BOLD VLOCK_INFO_BOX
   export_if_set VLOCK_MESSAGE VLOCK_ALL_MESSAGE VLOCK_CURRENT_MESSAGE
 

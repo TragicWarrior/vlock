@@ -37,6 +37,7 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <signal.h>
+#include <locale.h>
 #include <ncurses.h>
 #include <unistd.h>
 
@@ -70,6 +71,8 @@ bool vlock_save(void **ctx_ptr)
         .stdout_fd = NO_REDIRECT,
         .stderr_fd = NO_REDIRECT,
     };
+
+    setlocale(LC_ALL, "");
 
     initscr();
     savetty();

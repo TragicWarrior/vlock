@@ -31,6 +31,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <time.h>
+#include <locale.h>
 
 #include <ncurses.h>
 
@@ -81,6 +82,8 @@ bool vlock_save(void **ctx_ptr)
     };
 
     /* Initialize ncurses. */
+    setlocale(LC_ALL, "");
+
     initscr();
     signal(SIGINT, SIG_IGN);
     noecho();
@@ -88,7 +91,6 @@ bool vlock_save(void **ctx_ptr)
     nodelay(stdscr, TRUE);
     leaveok(stdscr, TRUE);
     scrollok(stdscr, FALSE);
-
 
     GError *tmp_error = NULL;
 
