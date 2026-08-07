@@ -100,7 +100,7 @@ bool vlock_save(void **ctx_ptr)
 
   initscr();
 
-  if (!create_child(&child))
+  if (!create_child(&child, NULL))
     return false;
 
   *ctx_ptr = &child;

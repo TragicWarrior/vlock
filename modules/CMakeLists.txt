@@ -33,7 +33,7 @@ foreach(m IN LISTS MODULES)
     OUTPUT_NAME "${m}"
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
   )
-  target_include_directories(mod_${m} PRIVATE ../src ${GLIB_INCLUDE_DIRS})
+  target_include_directories(mod_${m} PRIVATE ../src)
 
   if(DEFINED _libs_${m})
     target_link_libraries(mod_${m} PRIVATE ${_libs_${m}})
