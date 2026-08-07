@@ -85,7 +85,7 @@ bool vlock_save(void **ctx_ptr)
     signal(SIGINT, sighandler);
     signal(SIGWINCH, sighandler);
 
-    GError *tmp_error = NULL;
+    VError *tmp_error = NULL;
 
     if (!create_child(&cmatrix_proc, &tmp_error))
         return false;

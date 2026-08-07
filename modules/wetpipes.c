@@ -201,7 +201,7 @@ bool vlock_save(void **ctx_ptr)
         .stdout_fd = NO_REDIRECT,
         .stderr_fd = NO_REDIRECT,
     };
-    GError *tmp_error = NULL;
+    VError *tmp_error = NULL;
 
     setlocale(LC_ALL, "");
 

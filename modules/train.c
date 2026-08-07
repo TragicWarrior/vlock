@@ -92,7 +92,7 @@ bool vlock_save(void **ctx_ptr)
     leaveok(stdscr, TRUE);
     scrollok(stdscr, FALSE);
 
-    GError *tmp_error = NULL;
+    VError *tmp_error = NULL;
 
     if (!create_child(&train_proc, &tmp_error))
         return false;

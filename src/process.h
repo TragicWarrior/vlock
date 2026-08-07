@@ -15,11 +15,10 @@
 
 #include <stdbool.h>
 #include <sys/types.h>
-#include <glib.h>
+#include "verror.h"
 
 /* Errors */
-#define VLOCK_PROCESS_ERROR vlock_process_error_quark()
-GQuark vlock_process_error_quark(void);
+#define VLOCK_PROCESS_ERROR 2
 
 enum {
   VLOCK_PROCESS_ERROR_FAILED,
@@ -66,4 +65,4 @@ struct child_process
  * connected to the respective descriptor of the child.  The file descriptor of
  * the other end is stored in the field after the call.  It is up to the caller
  * to close the pipe descriptor(s). */
-bool create_child(struct child_process *child, GError **error);
+bool create_child(struct child_process *child, VError **error);

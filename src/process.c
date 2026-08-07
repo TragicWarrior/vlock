@@ -20,13 +20,9 @@
 #include <fcntl.h>
 #include <sys/select.h>
 #include <errno.h>
+#include <string.h>
 
 #include "process.h"
-
-GQuark vlock_process_error_quark(void)
-{
-  return g_quark_from_static_string("vlock-process-error-quark");
-}
 
 /* Do nothing. */
 static void ignore_sigalarm(int __attribute__((unused)) signum)
@@ -141,7 +137,7 @@ static int open_devnull(void)
   return devnull_fd;
 }
 
-bool create_child(struct child_process *child, GError **error)
+bool create_child(struct child_process *child, VError **error)
 {
   int child_errno = 0;
   int status_pipe[2];
@@ -156,31 +152,31 @@ bool create_child(struct child_process *child, GError **error)
 
   if (child->stdin_fd == REDIRECT_PIPE)
     if (pipe(stdin_pipe) < 0) {
-      g_set_error(error,
+      verror_set(error,
                   VLOCK_PROCESS_ERROR,
                   VLOCK_PROCESS_ERROR_FAILED,
                   "could not open stdin pipe: %s",
-                  g_strerror(errno));
+                  strerror(errno));
       goto stdin_pipe_failed;
     }
 
   if (child->stdout_fd == REDIRECT_PIPE)
     if (pipe(stdout_pipe) < 0) {
-      g_set_error(error,
+      verror_set(error,
                   VLOCK_PROCESS_ERROR,
                   VLOCK_PROCESS_ERROR_FAILED,
                   "could not open stdout pipe: %s",
-                  g_strerror(errno));
+                  strerror(errno));
       goto stdout_pipe_failed;
     }
 
   if (child->stderr_fd == REDIRECT_PIPE)
     if (pipe(stderr_pipe) < 0) {
-      g_set_error(error,
+      verror_set(error,
                   VLOCK_PROCESS_ERROR,
                   VLOCK_PROCESS_ERROR_FAILED,
                   "could not open stderr pipe: %s",
-                  g_strerror(errno));
+                  strerror(errno));
       goto stderr_pipe_failed;
     }
 
@@ -240,11 +236,11 @@ bool create_child(struct child_process *child, GError **error)
   }
 
   if (child->pid < 0) {
-    g_set_error(error,
+    verror_set(error,
                 VLOCK_PROCESS_ERROR,
                 VLOCK_PROCESS_ERROR_FAILED,
                 "could not fork: %s",
-                g_strerror(errno));
+                strerror(errno));
     goto fork_failed;
   }
 
@@ -253,13 +249,13 @@ bool create_child(struct child_process *child, GError **error)
   /* Get the error status from the child, if any. */
   if (read(status_pipe[0], &child_errno,
            sizeof child_errno) == sizeof child_errno) {
-    g_set_error(error,
+    verror_set(error,
                 VLOCK_PROCESS_ERROR,
                 child_errno == ENOENT ?
                 VLOCK_PROCESS_ERROR_NOT_FOUND :
                 VLOCK_PROCESS_ERROR_FAILED,
                 "child process could not exec: %s",
-                g_strerror(child_errno));
+                strerror(child_errno));
     goto child_failed;
   }
 

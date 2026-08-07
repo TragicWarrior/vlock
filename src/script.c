@@ -41,33 +41,31 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <time.h>
-
-#include <glib.h>
-#include <glib-object.h>
+#include <ctype.h>
+#include <assert.h>
 
 #include "process.h"
 #include "util.h"
-
 #include "plugin.h"
 #include "script.h"
 
 static char *read_dependency(const char *path,
                              const char *dependency_name,
-                             GError **error);
-static void parse_dependency(char *data, GList **dependency_list);
+                             VError **error);
+static void parse_dependency(char *data, VList **dependency_list);
 
 /* Get the dependency from the script. */
 static bool get_dependency(const char *path, const char *dependency_name,
-                           GList **dependency_list, GError **error)
+                           VList **dependency_list, VError **error)
 {
-  GError *tmp_error = NULL;
+  VError *tmp_error = NULL;
 
   /* Read the dependency data. */
   char *data = read_dependency(path, dependency_name, &tmp_error);
 
   if (data == NULL) {
     if (tmp_error != NULL) {
-      g_propagate_error(error, tmp_error);
+      verror_propagate(error, tmp_error);
       return false;
     } else
       /* No data. */
@@ -77,7 +75,7 @@ static bool get_dependency(const char *path, const char *dependency_name,
   /* Parse the dependency data into the list. */
   parse_dependency(data, dependency_list);
 
-  g_free(data);
+  free(data);
 
   return true;
 }
@@ -87,9 +85,9 @@ static bool get_dependency(const char *path, const char *dependency_name,
  * the dependencies to its stdout one on per line. */
 static char *read_dependency(const char *path,
                              const char *dependency_name,
-                             GError **error)
+                             VError **error)
 {
-  GError *tmp_error = NULL;
+  VError *tmp_error = NULL;
   const char *argv[] = { path, dependency_name, NULL };
   struct child_process child = {
     .path = path,
@@ -101,12 +99,19 @@ static char *read_dependency(const char *path,
   };
   /* Timeout is one second. */
   struct timeval timeout = {1, 0};
-  char *data = g_malloc(sizeof *data);
+  char *data = malloc(1);
   size_t data_length = 0;
 
+  if (data == NULL) {
+    verror_set(error, VLOCK_PLUGIN_ERROR, VLOCK_PLUGIN_ERROR_FAILED,
+               "out of memory");
+    return NULL;
+  }
+
   if (!create_child(&child, &tmp_error)) {
-    g_assert(tmp_error != NULL);
-    g_propagate_error(error, tmp_error);
+    assert(tmp_error != NULL);
+    verror_propagate(error, tmp_error);
+    free(data);
     return NULL;
   }
 
@@ -129,13 +134,13 @@ static char *read_dependency(const char *path,
 
     if (select(child.stdout_fd+1, &read_fds, NULL, NULL, &t) != 1) {
 timeout:
-      g_set_error(&tmp_error,
-                  VLOCK_PLUGIN_ERROR,
-                  VLOCK_PLUGIN_ERROR_FAILED,
-                  "reading dependency (%s) data from script %s failed: timeout",
-                  dependency_name,
-                  /* XXX: plugin->name */ path
-                  );
+      verror_set(&tmp_error,
+                 VLOCK_PLUGIN_ERROR,
+                 VLOCK_PLUGIN_ERROR_FAILED,
+                 "reading dependency (%s) data from script %s failed: timeout",
+                 dependency_name,
+                 /* XXX: plugin->name */ path
+                 );
       goto error;
     }
 
@@ -160,7 +165,7 @@ timeout:
       break;
 
     if (data_length+length+1 > LINE_MAX) {
-      g_set_error(
+      verror_set(
         &tmp_error,
         VLOCK_PLUGIN_ERROR,
         VLOCK_PLUGIN_ERROR_FAILED,
@@ -173,10 +178,18 @@ timeout:
 
     /* Grow the data string.  Reserve one extra byte for the terminating NUL
      * written after the loop, otherwise data[data_length] overflows by one. */
-    data = g_realloc(data, data_length+length+1);
+    {
+      char *grown = realloc(data, data_length+length+1);
+      if (grown == NULL) {
+        verror_set(&tmp_error, VLOCK_PLUGIN_ERROR, VLOCK_PLUGIN_ERROR_FAILED,
+                   "out of memory");
+        goto error;
+      }
+      data = grown;
+    }
 
     /* Append the buffer to the data string. */
-    strncpy(data+data_length, buffer, length);
+    memcpy(data+data_length, buffer, length);
     data_length += length;
   }
 
@@ -191,91 +204,102 @@ error:
     ensure_death(child.pid);
 
   if (tmp_error != NULL) {
-    g_propagate_error(error, tmp_error);
-    g_free(data);
+    verror_propagate(error, tmp_error);
+    free(data);
     data = NULL;
   }
 
   return data;
 }
 
-static void parse_dependency(char *data, GList **dependency_list)
+/* Strip leading/trailing whitespace in place; return pointer into same buffer. */
+static char *strstrip(char *s)
 {
-  char **dependency_items = g_strsplit_set(g_strstrip(data), " \r\n", -1);
+  char *end;
 
-  for (size_t i = 0; dependency_items[i] != NULL; i++)
-    *dependency_list = g_list_append(
-      *dependency_list,
-      g_strdup(dependency_items[i])
-      );
+  while (*s != '\0' && isspace((unsigned char)*s))
+    s++;
 
-  g_strfreev(dependency_items);
+  if (*s == '\0')
+    return s;
+
+  end = s + strlen(s) - 1;
+  while (end > s && isspace((unsigned char)*end))
+    end--;
+  end[1] = '\0';
+  return s;
 }
 
-struct _VlockScriptPrivate
+static void parse_dependency(char *data, VList **dependency_list)
 {
-  /* The path to the script. */
-  char *path;
-  /* Was the script launched? */
-  bool launched;
-  /* Did the script die? */
-  bool dead;
-  /* The pipe file descriptor that is connected to the script's stdin. */
-  int fd;
-  /* The PID of the script. */
-  pid_t pid;
-};
+  char *p = strstrip(data);
 
-G_DEFINE_TYPE_WITH_PRIVATE(VlockScript, vlock_script, TYPE_VLOCK_PLUGIN)
+  while (*p != '\0') {
+    /* Skip separators. */
+    while (*p != '\0' && (isspace((unsigned char)*p) || *p == '\r'))
+      p++;
+    if (*p == '\0')
+      break;
 
-/* Initialize plugin to default values. */
-static void vlock_script_init(VlockScript *self)
-{
-  self->priv = vlock_script_get_instance_private(self);
+    char *start = p;
+    while (*p != '\0' && !isspace((unsigned char)*p) && *p != '\r')
+      p++;
 
-  self->priv->dead = false;
-  self->priv->launched = false;
-  self->priv->path = NULL;
+    if (*p != '\0') {
+      *p = '\0';
+      p++;
+    }
+
+    if (*start != '\0') {
+      char *copy = strdup(start);
+      if (copy != NULL)
+        *dependency_list = vlist_append(*dependency_list, copy);
+    }
+  }
 }
 
-static void vlock_script_finalize(GObject *object)
+static void vlock_script_destroy(VlockPlugin *plugin)
 {
-  VlockScript *self = VLOCK_SCRIPT(object);
+  VlockScript *self = (VlockScript *)plugin;
 
-  g_free(self->priv->path);
+  free(self->path);
 
-  if (self->priv->launched) {
+  if (self->launched) {
     /* Close the pipe. */
-    (void) close(self->priv->fd);
+    (void) close(self->fd);
 
     /* Kill the child process. */
-    if (!wait_for_death(self->priv->pid, 0, 500000L))
-      ensure_death(self->priv->pid);
+    if (!wait_for_death(self->pid, 0, 500000L))
+      ensure_death(self->pid);
   }
 
-  G_OBJECT_CLASS(vlock_script_parent_class)->finalize(object);
+  free(self);
 }
 
-static bool vlock_script_open(VlockPlugin *plugin, GError **error)
+static bool vlock_script_open(VlockPlugin *plugin, VError **error)
 {
-  GError *tmp_error = NULL;
-  VlockScript *self = VLOCK_SCRIPT(plugin);
+  VError *tmp_error = NULL;
+  VlockScript *self = (VlockScript *)plugin;
 
-  self->priv->path = g_strdup_printf("%s/%s", VLOCK_SCRIPT_DIR, plugin->name);
+  if (asprintf(&self->path, "%s/%s", VLOCK_SCRIPT_DIR, plugin->name) < 0) {
+    verror_set(error, VLOCK_PLUGIN_ERROR, VLOCK_PLUGIN_ERROR_FAILED,
+               "out of memory");
+    return false;
+  }
 
   /* Get the dependency information.  Whether the script is executable or not
    * is also detected here. */
   for (size_t i = 0; i < nr_dependencies; i++)
-    if (!get_dependency(self->priv->path, dependency_names[i],
+    if (!get_dependency(self->path, dependency_names[i],
                         &plugin->dependencies[i], &tmp_error)) {
-      if (g_error_matches(tmp_error,
-                          VLOCK_PROCESS_ERROR,
-                          VLOCK_PROCESS_ERROR_NOT_FOUND) && i == 0) {
-        g_set_error(error, VLOCK_PLUGIN_ERROR, VLOCK_PLUGIN_ERROR_NOT_FOUND,
-                    "%s", tmp_error->message);
-        g_clear_error(&tmp_error);
+      if (verror_matches(tmp_error,
+                         VLOCK_PROCESS_ERROR,
+                         VLOCK_PROCESS_ERROR_NOT_FOUND) && i == 0) {
+        verror_set(error, VLOCK_PLUGIN_ERROR, VLOCK_PLUGIN_ERROR_NOT_FOUND,
+                   "%s", tmp_error->message);
+        verror_clear(&tmp_error);
       } else
-        g_propagate_error(error, tmp_error);
+        verror_propagate(error, tmp_error);
 
       return false;
     }
@@ -284,13 +308,13 @@ static bool vlock_script_open(VlockPlugin *plugin, GError **error)
 }
 
 /* Launch the script creating a new script_context. */
-static bool vlock_script_launch(VlockScript *script, GError **error)
+static bool vlock_script_launch(VlockScript *script, VError **error)
 {
-  GError *tmp_error = NULL;
+  VError *tmp_error = NULL;
   int fd_flags;
-  const char *argv[] = { script->priv->path, "hooks", NULL };
+  const char *argv[] = { script->path, "hooks", NULL };
   struct child_process child = {
-    .path = script->priv->path,
+    .path = script->path,
     .argv = argv,
     .stdin_fd = REDIRECT_PIPE,
     .stdout_fd = REDIRECT_DEV_NULL,
@@ -299,44 +323,44 @@ static bool vlock_script_launch(VlockScript *script, GError **error)
   };
 
   if (!create_child(&child, &tmp_error)) {
-    g_propagate_error(error, tmp_error);
+    verror_propagate(error, tmp_error);
     return false;
   }
 
-  script->priv->fd = child.stdin_fd;
-  script->priv->pid = child.pid;
+  script->fd = child.stdin_fd;
+  script->pid = child.pid;
 
-  fd_flags = fcntl(script->priv->fd, F_GETFL, &fd_flags);
+  fd_flags = fcntl(script->fd, F_GETFL, &fd_flags);
 
   if (fd_flags != -1) {
     fd_flags |= O_NONBLOCK;
-    (void) fcntl(script->priv->fd, F_SETFL, fd_flags);
+    (void) fcntl(script->fd, F_SETFL, fd_flags);
   }
 
   return true;
 }
 
-static bool vlock_script_call_hook(VlockPlugin *plugin, const gchar *hook_name)
+static bool vlock_script_call_hook(VlockPlugin *plugin, const char *hook_name)
 {
-  VlockScript *self = VLOCK_SCRIPT(plugin);
+  VlockScript *self = (VlockScript *)plugin;
   static const char newline = '\n';
   ssize_t hook_name_length = strlen(hook_name);
   ssize_t length;
   struct sigaction act;
   struct sigaction oldact;
 
-  if (!self->priv->launched) {
+  if (!self->launched) {
     /* Launch script. */
-    self->priv->launched = vlock_script_launch(self, NULL);
+    self->launched = vlock_script_launch(self, NULL);
 
-    if (!self->priv->launched) {
+    if (!self->launched) {
       /* Do not retry. */
-      self->priv->dead = true;
+      self->dead = true;
       return false;
     }
   }
 
-  if (self->priv->dead)
+  if (self->dead)
     /* Nothing to do. */
     return false;
 
@@ -348,30 +372,40 @@ static bool vlock_script_call_hook(VlockPlugin *plugin, const gchar *hook_name)
   (void) sigaction(SIGPIPE, &act, &oldact);
 
   /* Send hook name and a newline through the pipe. */
-  length = write(self->priv->fd, hook_name, hook_name_length);
+  length = write(self->fd, hook_name, hook_name_length);
 
   if (length > 0)
-    length += write(self->priv->fd, &newline, sizeof newline);
+    length += write(self->fd, &newline, sizeof newline);
 
   /* Restore the previous SIGPIPE handler. */
   (void) sigaction(SIGPIPE, &oldact, NULL);
 
   /* If write fails the script is considered dead. */
-  self->priv->dead = (length != hook_name_length + 1);
+  self->dead = (length != hook_name_length + 1);
 
-  return !self->priv->dead;
+  return !self->dead;
 }
 
-/* Initialize script class. */
-static void vlock_script_class_init(VlockScriptClass *klass)
+static const VlockPluginClass vlock_script_class = {
+  .destroy = vlock_script_destroy,
+  .open = vlock_script_open,
+  .call_hook = vlock_script_call_hook,
+};
+
+VlockPlugin *vlock_script_new(const char *name)
 {
-  GObjectClass *gobject_class = G_OBJECT_CLASS(klass);
-  VlockPluginClass *plugin_class = VLOCK_PLUGIN_CLASS(klass);
+  VlockScript *self = calloc(1, sizeof *self);
 
-  /* Virtual methods. */
-  gobject_class->finalize = vlock_script_finalize;
+  if (self == NULL)
+    return NULL;
 
-  plugin_class->open = vlock_script_open;
-  plugin_class->call_hook = vlock_script_call_hook;
+  if (!vlock_plugin_init(&self->parent, &vlock_script_class, name)) {
+    free(self);
+    return NULL;
+  }
+
+  self->dead = false;
+  self->launched = false;
+  self->path = NULL;
+  return &self->parent;
 }
-

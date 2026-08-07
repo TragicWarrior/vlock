@@ -11,14 +11,15 @@
  *
  */
 
+#pragma once
+
 #include <stdbool.h>
-#include <glib.h>
+#include "verror.h"
 
 /* forward declaration */
 struct timespec;
 
-#define VLOCK_AUTH_ERROR vlock_auth_error_quark()
-GQuark vlock_auth_error_quark(void);
+#define VLOCK_AUTH_ERROR 4
 
 enum {
   VLOCK_AUTH_ERROR_FAILED,
@@ -30,4 +31,4 @@ enum {
  * reason the function returns false.  The timeout is passed to the prompt
  * functions below if they are called.
  */
-bool auth(const char *user, struct timespec *timeout, GError **error);
+bool auth(const char *user, struct timespec *timeout, VError **error);
