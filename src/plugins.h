@@ -14,14 +14,14 @@
 #pragma once
 
 #include <stdbool.h>
-#include <glib.h>
+#include "verror.h"
 
 /* Load the named plugin. */
-bool load_plugin(const char *name, GError **error);
+bool load_plugin(const char *name, VError **error);
 
 /* Resolve all the dependencies between all plugins.  This function *must* be
  * called after all plugins were loaded.  */
-bool resolve_dependencies(GError **error);
+bool resolve_dependencies(VError **error);
 
 /* Unload all plugins. */
 void unload_plugins(void);

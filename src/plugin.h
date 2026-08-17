@@ -14,8 +14,8 @@
 #pragma once
 
 #include <stdbool.h>
-#include <glib.h>
-#include <glib-object.h>
+#include "vlist.h"
+#include "verror.h"
 
 /* Names of dependencies plugins may specify. */
 #define nr_dependencies 6
@@ -32,9 +32,8 @@ struct hook
 #define nr_hooks 4
 extern const struct hook hooks[nr_hooks];
 
-/* Errors */
-#define VLOCK_PLUGIN_ERROR vlock_plugin_error_quark()
-GQuark vlock_plugin_error_quark(void);
+/* Error domain / codes for plugin failures. */
+#define VLOCK_PLUGIN_ERROR 1
 
 enum {
   VLOCK_PLUGIN_ERROR_FAILED,
@@ -42,50 +41,39 @@ enum {
   VLOCK_PLUGIN_ERROR_NOT_FOUND
 };
 
-/*
- * Plugin type macros.
- */
-#define TYPE_VLOCK_PLUGIN (vlock_plugin_get_type())
-#define VLOCK_PLUGIN(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), TYPE_VLOCK_PLUGIN,\
-                                                      VlockPlugin))
-#define VLOCK_PLUGIN_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass),\
-                                                           TYPE_VLOCK_PLUGIN,\
-                                                           VlockPluginClass))
-#define IS_VLOCK_PLUGIN(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj),\
-                                                         TYPE_VLOCK_PLUGIN))
-#define IS_VLOCK_PLUGIN_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),\
-                                                              TYPE_VLOCK_PLUGIN))
-#define VLOCK_PLUGIN_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS((obj),\
-                                                               TYPE_VLOCK_PLUGIN,\
-                                                               VlockPluginClass))
+typedef struct VlockPlugin VlockPlugin;
+typedef struct VlockPluginClass VlockPluginClass;
 
-typedef struct _VlockPlugin VlockPlugin;
-typedef struct _VlockPluginClass VlockPluginClass;
-
-struct _VlockPlugin
+struct VlockPluginClass
 {
-  GObject parent_instance;
+  /* Free subtype-specific resources, then free the object. */
+  void (*destroy)(VlockPlugin *self);
+  bool (*open)(VlockPlugin *self, VError **error);
+  bool (*call_hook)(VlockPlugin *self, const char *hook_name);
+};
 
-  gchar *name;
+struct VlockPlugin
+{
+  const VlockPluginClass *klass;
 
-  GList *dependencies[nr_dependencies];
+  char *name;
+
+  VList *dependencies[nr_dependencies];
 
   bool save_disabled;
 };
 
-struct _VlockPluginClass
-{
-  GObjectClass parent_class;
+/* Initialize base fields (name, empty deps).  name is copied; slash stripped.
+ * Returns false on OOM. */
+bool vlock_plugin_init(VlockPlugin *self, const VlockPluginClass *klass,
+                       const char *name);
 
-  bool (*open)(VlockPlugin *self, GError **error);
-  bool (*call_hook)(VlockPlugin *self, const gchar *hook_name);
-};
-
-GType vlock_plugin_get_type(void);
+/* Destroy plugin (calls klass->destroy). */
+void vlock_plugin_unref(VlockPlugin *self);
 
 /* Open the plugin. */
-bool vlock_plugin_open(VlockPlugin *self, GError **error);
+bool vlock_plugin_open(VlockPlugin *self, VError **error);
 
-GList *vlock_plugin_get_dependencies(VlockPlugin *self,
-                                     const gchar *dependency_name);
-bool vlock_plugin_call_hook(VlockPlugin *self, const gchar *hook_name);
+VList *vlock_plugin_get_dependencies(VlockPlugin *self,
+                                     const char *dependency_name);
+bool vlock_plugin_call_hook(VlockPlugin *self, const char *hook_name);

@@ -11,33 +11,28 @@
  */
 
 #include <stdlib.h>
-#include <errno.h>
-
-#include "util.h"
-
 #include "tsort.h"
 
-/* Get the zeros of the graph, i.e. nodes with no incoming edges. */
-static GList *get_zeros(GList *nodes, GList *edges)
+/* Get all nodes with no incoming edges. */
+static VList *get_zeros(VList *nodes, VList *edges)
 {
-  GList *zeros = g_list_copy(nodes);
+  VList *zeros = vlist_copy(nodes);
 
-  for (GList *edge_item = edges;
+  for (VList *edge_item = edges;
        edge_item != NULL;
-       edge_item = g_list_next(edge_item)) {
+       edge_item = vlist_next(edge_item)) {
     struct edge *e = edge_item->data;
-    zeros = g_list_remove(zeros, e->successor);
+    zeros = vlist_remove(zeros, e->successor);
   }
 
   return zeros;
 }
 
-/* Check if the given node is a zero. */
-static bool is_zero(void *node, GList *edges)
+static bool is_zero(void *node, VList *edges)
 {
-  for (GList *edge_item = edges;
+  for (VList *edge_item = edges;
        edge_item != NULL;
-       edge_item = g_list_next(edge_item)) {
+       edge_item = vlist_next(edge_item)) {
     struct edge *e = edge_item->data;
 
     if (e->successor == node)
@@ -50,63 +45,55 @@ static bool is_zero(void *node, GList *edges)
 /* For the given directed graph, generate a topological sort of the nodes.
  *
  * Sorts the list and deletes all edges.  If there are circles found in the
- * graph or there are edges that have no corresponding nodes the erroneous
- * edges are left.
- *
- * The algorithm is taken from the Wikipedia:
- *
- * http://en.wikipedia.org/w/index.php?title=Topological_sorting&oldid=153157450#Algorithms
- *
- */
-GList *tsort(GList *nodes, GList **edges)
+ * graph or there are edges that have no corresponding nodes NULL is returned
+ * and the erroneous edges are left. */
+VList *tsort(VList *nodes, VList **edges)
 {
-  /* Retrieve all zeros. */
-  GList *zeros = get_zeros(nodes, *edges);
+  /* The algorithm is simple here: Keep finding nodes that are not depending on
+   * any other node, put them into the sorted list and remove the edges that
+   * this node is part of.  When there are no such "zero" nodes left we are
+   * either done or there is an error and there is a cycle in the graph. */
 
-  GList *sorted_nodes = NULL;
+  VList *zeros = get_zeros(nodes, *edges);
+  /* Sorted list of nodes. */
+  VList *sorted_nodes = NULL;
 
-  /* While the list of zeros is not empty ... */
   while (zeros != NULL) {
-    /* ... take the first zero and remove it and ...*/
     void *zero = zeros->data;
-    zeros = g_list_delete_link(zeros, zeros);
+    zeros = vlist_delete_link(zeros, zeros);
 
-    /* ... add it to the list of sorted nodes. */
-    sorted_nodes = g_list_append(sorted_nodes, zero);
+    /* Append the zero to the list of sorted nodes. */
+    sorted_nodes = vlist_append(sorted_nodes, zero);
 
-    /* Then look at each edge ... */
-    for (GList *edge_item = *edges;
-         edge_item != NULL;) {
+    /* Remove all edges that have this zero as a predecessor. */
+    for (VList *edge_item = *edges;
+         edge_item != NULL; ) {
       struct edge *e = edge_item->data;
+      VList *tmp = vlist_next(edge_item);
 
-      GList *tmp = g_list_next(edge_item);
-
-      /* ... that has this zero as its predecessor ... */
       if (e->predecessor == zero) {
-        /* ... and remove it. */
-        *edges = g_list_delete_link(*edges, edge_item);
+        void *successor = e->successor;
 
-        /* If the successor has become a zero now ... */
-        if (is_zero(e->successor, *edges))
-          /* ... add it to the list of zeros. */
-          zeros = g_list_append(zeros, e->successor);
+        *edges = vlist_delete_link(*edges, edge_item);
+        free(e);
 
-        g_free(e);
+        /* If the successor has become a zero now append it to the list of
+         * zeros. */
+        if (is_zero(successor, *edges))
+          zeros = vlist_append(zeros, successor);
       }
 
       edge_item = tmp;
     }
   }
 
-  /* If all edges were deleted the algorithm was successful. */
   if (*edges != NULL) {
-    g_list_free(sorted_nodes);
-    sorted_nodes = NULL;
+    /* There are still edges left: there was a cycle.  Clean up and return
+     * NULL. */
+    vlist_free(sorted_nodes);
+    return NULL;
   }
 
-  g_list_free(zeros);
-
+  vlist_free(zeros);
   return sorted_nodes;
-  ;
 }
-

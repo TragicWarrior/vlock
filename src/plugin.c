@@ -14,161 +14,83 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-
-#include <glib.h>
+#include <assert.h>
 
 #include "plugin.h"
 #include "util.h"
 
-GQuark vlock_plugin_error_quark(void)
+/* Initialize base fields.  name is copied; any directory prefix is stripped
+ * (plugin names must not contain a slash for security). */
+bool vlock_plugin_init(VlockPlugin *self, const VlockPluginClass *klass,
+                       const char *name)
 {
-  return g_quark_from_static_string("vlock-plugin-error-quark");
-}
+  assert(self != NULL);
+  assert(klass != NULL);
+  assert(name != NULL);
 
-G_DEFINE_TYPE(VlockPlugin, vlock_plugin, G_TYPE_OBJECT)
-
-/* Initialize plugin to default values. */
-static void vlock_plugin_init(VlockPlugin *self)
-{
-  self->name = NULL;
+  memset(self, 0, sizeof *self);
+  self->klass = klass;
   self->save_disabled = false;
+
   for (size_t i = 0; i < nr_dependencies; i++)
     self->dependencies[i] = NULL;
+
+  /* For security plugin names must not contain a slash. */
+  const char *last_slash = strrchr(name, '/');
+  if (last_slash != NULL)
+    name = last_slash + 1;
+
+  self->name = strdup(name);
+  if (self->name == NULL)
+    return false;
+
+  return true;
 }
 
-/* Create new plugin object. */
-static GObject *vlock_plugin_constructor(GType gtype,
-                                         guint n_properties,
-                                         GObjectConstructParam *properties)
+void vlock_plugin_unref(VlockPlugin *self)
 {
-  GObjectClass *parent_class = G_OBJECT_CLASS(vlock_plugin_parent_class);
-  GObject *object = parent_class->constructor(gtype, n_properties, properties);
-  VlockPlugin *self = VLOCK_PLUGIN(object);
+  if (self == NULL)
+    return;
 
-  g_return_val_if_fail(self->name != NULL, NULL);
-
-  return object;
-}
-
-/* Destroy plugin object. */
-static void vlock_plugin_finalize(GObject *object)
-{
-  VlockPlugin *self = VLOCK_PLUGIN(object);
-
-  g_free(self->name);
-  self->name = NULL;
-
-  /* Destroy dependency lists. */
+  /* Free dependency string lists. */
   for (size_t i = 0; i < nr_dependencies; i++) {
     while (self->dependencies[i] != NULL) {
-      g_free(self->dependencies[i]->data);
-      self->dependencies[i] = g_list_delete_link(self->dependencies[i],
-                                                 self->dependencies[i]);
+      free(self->dependencies[i]->data);
+      self->dependencies[i] = vlist_delete_link(self->dependencies[i],
+                                                self->dependencies[i]);
     }
   }
 
-  G_OBJECT_CLASS(vlock_plugin_parent_class)->finalize(object);
+  free(self->name);
+  self->name = NULL;
+
+  if (self->klass != NULL && self->klass->destroy != NULL)
+    self->klass->destroy(self);
+  else
+    free(self);
 }
 
-/* Properties. */
-enum {
-  PROP_VLOCK_PLUGIN_0,
-  PROP_VLOCK_PLUGIN_NAME
-};
-
-static void vlock_plugin_set_name(VlockPlugin *self, const gchar *name)
+bool vlock_plugin_open(VlockPlugin *self, VError **error)
 {
-  /* For security plugin names must not contain a slash. */
-  char *last_slash = strrchr(name, '/');
-
-  if (last_slash != NULL)
-    name = last_slash+1;
-
-  self->name = g_strdup(name);
+  assert(self != NULL);
+  assert(self->klass != NULL);
+  assert(self->klass->open != NULL);
+  return self->klass->open(self, error);
 }
 
-/* Set properties. */
-static void vlock_plugin_set_property(GObject *object,
-                                      guint property_id,
-                                      const GValue *value,
-                                      GParamSpec *pspec)
+bool vlock_plugin_call_hook(VlockPlugin *self, const char *hook_name)
 {
-  VlockPlugin *self = VLOCK_PLUGIN(object);
-
-  switch (property_id)
-  {
-    case PROP_VLOCK_PLUGIN_NAME:
-      g_free(self->name);
-      vlock_plugin_set_name(self, g_value_get_string(value));
-      break;
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
-      break;
-  }
+  assert(self != NULL);
+  assert(self->klass != NULL);
+  assert(self->klass->call_hook != NULL);
+  return self->klass->call_hook(self, hook_name);
 }
 
-/* Get properties. */
-static void vlock_plugin_get_property(GObject *object,
-                                      guint property_id,
-                                      GValue *value,
-                                      GParamSpec *pspec)
+VList *vlock_plugin_get_dependencies(VlockPlugin *self,
+                                     const char *dependency_name)
 {
-  VlockPlugin *self = VLOCK_PLUGIN(object);
-
-  switch (property_id)
-  {
-    case PROP_VLOCK_PLUGIN_NAME:
-      g_value_set_string(value, self->name);
-      break;
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, property_id, pspec);
-      break;
-  }
+  for (size_t i = 0; i < nr_dependencies; i++)
+    if (strcmp(dependency_names[i], dependency_name) == 0)
+      return self->dependencies[i];
+  return NULL;
 }
-
-/* Initialize plugin class. */
-static void vlock_plugin_class_init(VlockPluginClass *klass)
-{
-  GObjectClass *gobject_class = G_OBJECT_CLASS(klass);
-  GParamSpec *vlock_plugin_param_spec;
-
-  /* Virtual methods. */
-  klass->open = NULL;
-  klass->call_hook = NULL;
-
-  /* Install overridden methods. */
-  gobject_class->constructor = vlock_plugin_constructor;
-  gobject_class->finalize = vlock_plugin_finalize;
-  gobject_class->set_property = vlock_plugin_set_property;
-  gobject_class->get_property = vlock_plugin_get_property;
-
-  /* Install properties. */
-  vlock_plugin_param_spec = g_param_spec_string(
-    "name",
-    "plugin name",
-    "Set the plugin's name",
-    NULL,
-    G_PARAM_CONSTRUCT_ONLY | G_PARAM_READWRITE
-    );
-
-  g_object_class_install_property(
-    gobject_class,
-    PROP_VLOCK_PLUGIN_NAME,
-    vlock_plugin_param_spec
-    );
-}
-
-bool vlock_plugin_open(VlockPlugin *self, GError **error)
-{
-  VlockPluginClass *klass = VLOCK_PLUGIN_GET_CLASS(self);
-  g_assert(klass->open != NULL);
-  return klass->open(self, error);
-}
-
-bool vlock_plugin_call_hook(VlockPlugin *self, const gchar *hook_name)
-{
-  VlockPluginClass *klass = VLOCK_PLUGIN_GET_CLASS(self);
-  g_assert(klass->call_hook != NULL);
-  return klass->call_hook(self, hook_name);
-}
-

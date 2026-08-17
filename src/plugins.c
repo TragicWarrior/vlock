@@ -16,20 +16,16 @@
 #include <errno.h>
 #include <assert.h>
 
-#include <glib.h>
-
 #include "plugins.h"
-
+#include "vlist.h"
 #include "tsort.h"
-
 #include "plugin.h"
 #include "module.h"
 #include "script.h"
-
 #include "util.h"
 
 /* the list of plugins */
-static GList *plugins = NULL;
+static VList *plugins = NULL;
 
 /****************/
 /* dependencies */
@@ -72,16 +68,16 @@ const struct hook hooks[nr_hooks] = {
 /**********************/
 
 /* helper declarations */
-static VlockPlugin *__load_plugin(const char *name, GError **error);
-static bool __resolve_depedencies(GError **error);
-static bool sort_plugins(GError **error);
+static VlockPlugin *__load_plugin(const char *name, VError **error);
+static bool __resolve_depedencies(VError **error);
+static bool sort_plugins(VError **error);
 
-bool load_plugin(const char *name, GError **error)
+bool load_plugin(const char *name, VError **error)
 {
   return __load_plugin(name, error) != NULL;
 }
 
-bool resolve_dependencies(GError **error)
+bool resolve_dependencies(VError **error)
 {
   return __resolve_depedencies(error) && sort_plugins(error);
 }
@@ -89,8 +85,8 @@ bool resolve_dependencies(GError **error)
 void unload_plugins(void)
 {
   while (plugins != NULL) {
-    g_object_unref(plugins->data);
-    plugins = g_list_delete_link(plugins, plugins);
+    vlock_plugin_unref(plugins->data);
+    plugins = vlist_delete_link(plugins, plugins);
   }
 }
 
@@ -108,16 +104,18 @@ void plugin_hook(const char *hook_name)
 /* helper functions */
 /********************/
 
-static gint plugin_name_compare(VlockPlugin *p, const char *name)
+static int plugin_name_compare(const void *a, const void *b)
 {
+  const VlockPlugin *p = a;
+  const char *name = b;
   return strcmp(name, p->name);
 }
 
 static VlockPlugin *get_plugin(const char *name)
 {
-  GList *item = g_list_find_custom(plugins,
-                                   name,
-                                   (GCompareFunc) plugin_name_compare);
+  VList *item = vlist_find_custom(plugins,
+                                  name,
+                                  plugin_name_compare);
 
   if (item != NULL)
     return item->data;
@@ -125,128 +123,132 @@ static VlockPlugin *get_plugin(const char *name)
     return NULL;
 }
 
-/* Load and return the named plugin. */
-static VlockPlugin *__load_plugin(const char *name, GError **error)
+/* Load and return the named plugin.  Tries module, then script. */
+static VlockPlugin *__load_plugin(const char *name, VError **error)
 {
   VlockPlugin *p = get_plugin(name);
 
   if (p != NULL)
     return p;
 
-  GError *err = NULL;
+  VError *err = NULL;
+  typedef VlockPlugin *(*plugin_ctor)(const char *);
+  plugin_ctor constructors[] = { vlock_module_new, vlock_script_new, NULL };
 
-  /* Possible plugin types. */
-  GType plugin_types[] = { TYPE_VLOCK_MODULE, TYPE_VLOCK_SCRIPT, 0 };
-
-  for (size_t i = 0; plugin_types[i] != 0; i++) {
-    if (err == NULL || g_error_matches(err,
-                                       VLOCK_PLUGIN_ERROR,
-                                       VLOCK_PLUGIN_ERROR_NOT_FOUND))
-      /* Continue if the was no previous error or the error was "not found". */
-      g_clear_error(&err);
+  for (size_t i = 0; constructors[i] != NULL; i++) {
+    if (err == NULL || verror_matches(err,
+                                      VLOCK_PLUGIN_ERROR,
+                                      VLOCK_PLUGIN_ERROR_NOT_FOUND))
+      /* Continue if there was no previous error or the error was "not found". */
+      verror_clear(&err);
     else
       /* Bail out on real errors. */
       break;
 
     /* Create the plugin. */
-    p = g_object_new(plugin_types[i], "name", name, NULL);
+    p = constructors[i](name);
+    if (p == NULL) {
+      verror_set(&err, VLOCK_PLUGIN_ERROR, VLOCK_PLUGIN_ERROR_FAILED,
+                 "out of memory loading plugin '%s'", name);
+      break;
+    }
 
     /* Try to open the plugin. */
     if (vlock_plugin_open(p, &err)) {
-      g_assert(err == NULL);
+      assert(err == NULL);
       break;
     } else {
-      g_assert(err != NULL);
-      g_object_unref(p);
+      assert(err != NULL);
+      vlock_plugin_unref(p);
       p = NULL;
     }
   }
 
   if (err != NULL) {
-    g_assert(p == NULL);
+    assert(p == NULL);
 
-    g_propagate_error(error, err);
+    verror_propagate(error, err);
 
     return NULL;
   } else {
-    g_assert(p != NULL);
+    assert(p != NULL);
 
-    plugins = g_list_append(plugins, p);
+    plugins = vlist_append(plugins, p);
 
     return p;
   }
 }
 
 /* Resolve the dependencies of the plugins. */
-static bool __resolve_depedencies(GError **error)
+static bool __resolve_depedencies(VError **error)
 {
-  GList *required_plugins = NULL;
+  VList *required_plugins = NULL;
 
   /* Load plugins that are required.  This automagically takes care of plugins
    * that are required by the plugins loaded here because they are appended to
    * the end of the list. */
-  for (GList *plugin_item = plugins;
+  for (VList *plugin_item = plugins;
        plugin_item != NULL;
-       plugin_item = g_list_next(plugin_item)) {
+       plugin_item = vlist_next(plugin_item)) {
     VlockPlugin *p = plugin_item->data;
 
-    for (GList *dependency_item = p->dependencies[REQUIRES];
+    for (VList *dependency_item = p->dependencies[REQUIRES];
          dependency_item != NULL;
-         dependency_item = g_list_next(dependency_item)) {
+         dependency_item = vlist_next(dependency_item)) {
       const char *d = dependency_item->data;
       VlockPlugin *q = __load_plugin(d, NULL);
 
       if (q == NULL) {
-        g_set_error(
+        verror_set(
           error,
           VLOCK_PLUGIN_ERROR,
           VLOCK_PLUGIN_ERROR_DEPENDENCY,
           "'%s' requires '%s' which could not be loaded", p->name, d);
-        g_list_free(required_plugins);
+        vlist_free(required_plugins);
         return false;
       }
 
-      required_plugins = g_list_append(required_plugins, p);
+      required_plugins = vlist_append(required_plugins, p);
     }
   }
 
   /* Fail if a plugins that is needed is not loaded. */
-  for (GList *plugin_item = plugins;
+  for (VList *plugin_item = plugins;
        plugin_item != NULL;
-       plugin_item = g_list_next(plugin_item)) {
+       plugin_item = vlist_next(plugin_item)) {
     VlockPlugin *p = plugin_item->data;
 
-    for (GList *dependency_item = p->dependencies[NEEDS];
+    for (VList *dependency_item = p->dependencies[NEEDS];
          dependency_item != NULL;
-         dependency_item = g_list_next(dependency_item)) {
+         dependency_item = vlist_next(dependency_item)) {
       const char *d = dependency_item->data;
       VlockPlugin *q = get_plugin(d);
 
       if (q == NULL) {
-        g_set_error(
+        verror_set(
           error,
           VLOCK_PLUGIN_ERROR,
           VLOCK_PLUGIN_ERROR_DEPENDENCY,
           "'%s' needs '%s' which is not loaded", p->name, d);
-        g_list_free(required_plugins);
+        vlist_free(required_plugins);
         errno = 0;
         return false;
       }
 
-      required_plugins = g_list_append(required_plugins, q);
+      required_plugins = vlist_append(required_plugins, q);
     }
   }
 
   /* Unload plugins whose prerequisites are not present, fail if those plugins
    * are required. */
-  for (GList *plugin_item = plugins;
+  for (VList *plugin_item = plugins;
        plugin_item != NULL; ) {
     VlockPlugin *p = plugin_item->data;
     bool dependencies_loaded = true;
 
-    for (GList *dependency_item = p->dependencies[DEPENDS];
+    for (VList *dependency_item = p->dependencies[DEPENDS];
          dependency_item != NULL;
-         dependency_item = g_list_next(dependency_item)) {
+         dependency_item = vlist_next(dependency_item)) {
       const char *d = dependency_item->data;
       VlockPlugin *q = get_plugin(d);
 
@@ -254,15 +256,15 @@ static bool __resolve_depedencies(GError **error)
         dependencies_loaded = false;
 
         /* Abort if dependencies not met and plugin is required. */
-        if (g_list_find(required_plugins, p) != NULL) {
-          g_set_error(
+        if (vlist_find(required_plugins, p) != NULL) {
+          verror_set(
             error,
             VLOCK_PLUGIN_ERROR,
             VLOCK_PLUGIN_ERROR_DEPENDENCY,
             "'%s' is required by some other plugin but depends on '%s' which is not loaded",
             p->name,
             d);
-          g_list_free(required_plugins);
+          vlist_free(required_plugins);
           errno = 0;
           return false;
         }
@@ -271,30 +273,30 @@ static bool __resolve_depedencies(GError **error)
       }
     }
 
-    GList *next_plugin_item = g_list_next(plugin_item);
+    VList *next_plugin_item = vlist_next(plugin_item);
 
     if (!dependencies_loaded) {
-      g_object_unref(p);
-      plugins = g_list_delete_link(plugins, plugin_item);
+      vlock_plugin_unref(p);
+      plugins = vlist_delete_link(plugins, plugin_item);
     }
 
     plugin_item = next_plugin_item;
   }
 
-  g_list_free(required_plugins);
+  vlist_free(required_plugins);
 
   /* Fail if conflicting plugins are loaded. */
-  for (GList *plugin_item = plugins;
+  for (VList *plugin_item = plugins;
        plugin_item != NULL;
-       plugin_item = g_list_next(plugin_item)) {
+       plugin_item = vlist_next(plugin_item)) {
     VlockPlugin *p = plugin_item->data;
 
-    for (GList *dependency_item = p->dependencies[CONFLICTS];
+    for (VList *dependency_item = p->dependencies[CONFLICTS];
          dependency_item != NULL;
-         dependency_item = g_list_next(dependency_item)) {
+         dependency_item = vlist_next(dependency_item)) {
       const char *d = dependency_item->data;
       if (get_plugin(d) != NULL) {
-        g_set_error(
+        verror_set(
           error,
           VLOCK_PLUGIN_ERROR,
           VLOCK_PLUGIN_ERROR_DEPENDENCY,
@@ -310,14 +312,14 @@ static bool __resolve_depedencies(GError **error)
   return true;
 }
 
-static GList *get_edges(void);
+static VList *get_edges(void);
 
 /* Sort the list of plugins according to their "preceeds" and "succeeds"
 * dependencies.  Fails if sorting is not possible because of circles. */
-static bool sort_plugins(GError **error)
+static bool sort_plugins(VError **error)
 {
-  GList *edges = get_edges();
-  GList *sorted_plugins;
+  VList *edges = get_edges();
+  VList *sorted_plugins;
 
   /* Topological sort. */
   sorted_plugins = tsort(plugins, &edges);
@@ -328,70 +330,79 @@ static bool sort_plugins(GError **error)
     /* Switch the global list of plugins for the sorted list.  The global list
      * is static and cannot be freed. */
 
-    g_assert(edges == NULL);
-    g_assert(g_list_length(sorted_plugins) == g_list_length(plugins));
+    assert(edges == NULL);
+    assert(vlist_length(sorted_plugins) == vlist_length(plugins));
 
-    GList *tmp = plugins;
+    VList *tmp = plugins;
     plugins = sorted_plugins;
 
-    g_list_free(tmp);
+    vlist_free(tmp);
 
     return true;
   } else {
-    GString *error_message = g_string_new("circular dependencies detected:");
+    char *error_message = NULL;
+    size_t msg_len = 0;
+    FILE *mem = open_memstream(&error_message, &msg_len);
 
-    while (edges != NULL) {
-      struct edge *e = edges->data;
-      VlockPlugin *p = e->predecessor;
-      VlockPlugin *s = e->successor;
+    if (mem != NULL) {
+      fputs("circular dependencies detected:", mem);
 
-      g_string_append_printf(error_message,
-                             "\n\t'%s'\tmust come before\t'%s'",
-                             p->name,
-                             s->name);
-      g_free(e);
-      edges = g_list_delete_link(edges, edges);
+      while (edges != NULL) {
+        struct edge *e = edges->data;
+        VlockPlugin *p = e->predecessor;
+        VlockPlugin *s = e->successor;
+
+        fprintf(mem, "\n\t'%s'\tmust come before\t'%s'", p->name, s->name);
+        free(e);
+        edges = vlist_delete_link(edges, edges);
+      }
+      fclose(mem);
+    } else {
+      while (edges != NULL) {
+        free(edges->data);
+        edges = vlist_delete_link(edges, edges);
+      }
     }
 
-    g_set_error(error,
-                VLOCK_PLUGIN_ERROR,
-                VLOCK_PLUGIN_ERROR_DEPENDENCY,
-                "%s",
-                error_message->str);
+    verror_set(error,
+               VLOCK_PLUGIN_ERROR,
+               VLOCK_PLUGIN_ERROR_DEPENDENCY,
+               "%s",
+               error_message ? error_message : "circular dependencies detected");
 
-    g_string_free(error_message, true);
+    free(error_message);
     return false;
   }
 }
 
 /* Get the edges of the plugin graph specified by each plugin's "preceeds" and
  * "succeeds" dependencies. */
-static GList *get_edges(void)
+static VList *get_edges(void)
 {
-  GList *edges = NULL;
+  VList *edges = NULL;
 
-  for (GList *plugin_item = plugins;
+  for (VList *plugin_item = plugins;
        plugin_item != NULL;
-       plugin_item = g_list_next(plugin_item)) {
+       plugin_item = vlist_next(plugin_item)) {
     VlockPlugin *p = plugin_item->data;
     /* p must come after these */
-    for (GList *predecessor_item = p->dependencies[SUCCEEDS];
+    for (VList *predecessor_item = p->dependencies[SUCCEEDS];
          predecessor_item != NULL;
-         predecessor_item = g_list_next(predecessor_item)) {
+         predecessor_item = vlist_next(predecessor_item)) {
       VlockPlugin *q = get_plugin(predecessor_item->data);
 
       if (q != NULL)
-        edges = g_list_append(edges, make_edge(q, p));
+        edges = vlist_append(edges, make_edge(q, p));
     }
 
     /* p must come before these */
-    for (GList *successor_item = p->dependencies[PRECEEDS];
+    for (VList *successor_item = p->dependencies[PRECEEDS];
          successor_item != NULL;
-         successor_item = g_list_next(successor_item)) {
+         successor_item = vlist_next(successor_item)) {
       VlockPlugin *q = get_plugin(successor_item->data);
 
       if (q != NULL)
-        edges = g_list_append(edges, make_edge(p, q));
+        edges = vlist_append(edges, make_edge(p, q));
     }
   }
 
@@ -407,17 +418,17 @@ static GList *get_edges(void)
  * called before are called in reverse order. */
 void handle_vlock_start(const char *hook_name)
 {
-  for (GList *plugin_item = plugins;
+  for (VList *plugin_item = plugins;
        plugin_item != NULL;
-       plugin_item = g_list_next(plugin_item)) {
+       plugin_item = vlist_next(plugin_item)) {
     VlockPlugin *p = plugin_item->data;
 
     if (!vlock_plugin_call_hook(p, hook_name)) {
       int errsv = errno;
 
-      for (GList *reverse_item = g_list_previous(plugin_item);
+      for (VList *reverse_item = vlist_prev(plugin_item);
            reverse_item != NULL;
-           reverse_item = g_list_previous(reverse_item)) {
+           reverse_item = vlist_prev(reverse_item)) {
         VlockPlugin *r = reverse_item->data;
         (void) vlock_plugin_call_hook(r, "vlock_end");
       }
@@ -434,9 +445,9 @@ void handle_vlock_start(const char *hook_name)
 /* Call the "vlock_end" hook of each plugin in reverse order.  Never fails. */
 void handle_vlock_end(const char *hook_name)
 {
-  for (GList *plugin_item = g_list_last(plugins);
+  for (VList *plugin_item = vlist_last(plugins);
        plugin_item != NULL;
-       plugin_item = g_list_previous(plugin_item)) {
+       plugin_item = vlist_prev(plugin_item)) {
     VlockPlugin *p = plugin_item->data;
     (void) vlock_plugin_call_hook(p, hook_name);
   }
@@ -447,9 +458,9 @@ void handle_vlock_end(const char *hook_name)
  * called again afterwards. */
 void handle_vlock_save(const char *hook_name)
 {
-  for (GList *plugin_item = plugins;
+  for (VList *plugin_item = plugins;
        plugin_item != NULL;
-       plugin_item = g_list_next(plugin_item)) {
+       plugin_item = vlist_next(plugin_item)) {
     VlockPlugin *p = plugin_item->data;
 
     if (p->save_disabled)
@@ -467,9 +478,9 @@ void handle_vlock_save(const char *hook_name)
  * again afterwards. */
 void handle_vlock_save_abort(const char *hook_name)
 {
-  for (GList *plugin_item = g_list_last(plugins);
+  for (VList *plugin_item = vlist_last(plugins);
        plugin_item != NULL;
-       plugin_item = g_list_previous(plugin_item)) {
+       plugin_item = vlist_prev(plugin_item)) {
     VlockPlugin *p = plugin_item->data;
 
     if (p->save_disabled)
@@ -479,4 +490,3 @@ void handle_vlock_save_abort(const char *hook_name)
       p->save_disabled = true;
   }
 }
-

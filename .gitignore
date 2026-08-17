@@ -1,2 +1,9 @@
 config.mk
 build/
+build-nolibc/
+
+# In-tree / root build products
+/modules/*.so
+/vlock
+/vlock-config
+/vlock-main

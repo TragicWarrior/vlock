@@ -201,7 +201,7 @@ bool vlock_save(void **ctx_ptr)
         .stdout_fd = NO_REDIRECT,
         .stderr_fd = NO_REDIRECT,
     };
-    GError *tmp_error = NULL;
+    VError *tmp_error = NULL;
 
     setlocale(LC_ALL, "");
 
@@ -216,8 +216,11 @@ bool vlock_save(void **ctx_ptr)
     signal(SIGINT,   sighandler);
     signal(SIGWINCH, sighandler);
 
-    if(!create_child(&wetpipes_proc, &tmp_error))
+    if(!create_child(&wetpipes_proc, &tmp_error)) {
+        verror_free(tmp_error);
+        endwin();
         return false;
+    }
 
     *ctx_ptr = &wetpipes_proc;
     return true;

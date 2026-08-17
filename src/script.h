@@ -1,39 +1,25 @@
 #pragma once
 
-#include <glib-object.h>
+#include <sys/types.h>
+#include "plugin.h"
 
-/*
- * Script type macros.
- */
-#define TYPE_VLOCK_SCRIPT (vlock_script_get_type())
-#define VLOCK_SCRIPT(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), TYPE_VLOCK_SCRIPT,\
-                                                      VlockScript))
-#define VLOCK_SCRIPT_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass),\
-                                                           TYPE_VLOCK_SCRIPT,\
-                                                           VlockScriptClass))
-#define IS_VLOCK_SCRIPT(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj),\
-                                                         TYPE_VLOCK_SCRIPT))
-#define IS_VLOCK_SCRIPT_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),\
-                                                              TYPE_VLOCK_SCRIPT))
-#define VLOCK_SCRIPT_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS((obj),\
-                                                               TYPE_VLOCK_SCRIPT,\
-                                                               VlockScriptClass))
+typedef struct VlockScript VlockScript;
 
-typedef struct _VlockScript VlockScript;
-typedef struct _VlockScriptClass VlockScriptClass;
-
-typedef struct _VlockScriptPrivate VlockScriptPrivate;
-
-struct _VlockScript
+struct VlockScript
 {
-  VlockPlugin parent_instance;
+  VlockPlugin parent;
 
-  VlockScriptPrivate *priv;
+  /* The path to the script. */
+  char *path;
+  /* Was the script launched? */
+  bool launched;
+  /* Did the script die? */
+  bool dead;
+  /* The pipe file descriptor that is connected to the script's stdin. */
+  int fd;
+  /* The PID of the script. */
+  pid_t pid;
 };
 
-struct _VlockScriptClass
-{
-  VlockPluginClass parent_class;
-};
-
-GType vlock_script_get_type(void);
+/* Allocate and initialize a script plugin for `name`.  Returns NULL on OOM. */
+VlockPlugin *vlock_script_new(const char *name);

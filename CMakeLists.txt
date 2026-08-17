@@ -46,11 +46,10 @@ set(CMAKE_C_EXTENSIONS ON)        # -std=gnu99 (gnu extensions: explicit_bzero e
 add_compile_options(-Wall -Wextra -pedantic)
 
 #=============================================================================
-# Dependencies
+# Dependencies (libc only for core; modules may use ncurses via modules/)
 #=============================================================================
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(GLIB REQUIRED IMPORTED_TARGET glib-2.0 gobject-2.0)
 
 #=============================================================================
 # vlock-main (setuid-root core)
@@ -65,6 +64,8 @@ set(VLOCK_MAIN_SOURCES
   src/terminal.c
   src/util.c
   src/logging.c
+  src/vlist.c
+  src/verror.c
 )
 
 if(ENABLE_PLUGINS)
@@ -80,7 +81,6 @@ endif()
 
 add_executable(vlock-main ${VLOCK_MAIN_SOURCES})
 target_include_directories(vlock-main PRIVATE src)
-target_link_libraries(vlock-main PRIVATE PkgConfig::GLIB)
 
 if(NOT ENABLE_ROOT_PASSWORD)
   target_compile_definitions(vlock-main PRIVATE NO_ROOT_PASS)
@@ -176,9 +176,11 @@ if(BUILD_TESTING AND ENABLE_PLUGINS)
       src/tsort.c
       src/util.c
       src/process.c
+      src/vlist.c
+      src/verror.c
     )
     target_include_directories(vlock-test PRIVATE src tests)
-    target_link_libraries(vlock-test PRIVATE PkgConfig::GLIB ${CUNIT_LIBRARY})
+    target_link_libraries(vlock-test PRIVATE ${CUNIT_LIBRARY})
     add_test(NAME vlock-test COMMAND vlock-test)
     set_tests_properties(vlock-test PROPERTIES
       ENVIRONMENT "VLOCK_TEST_OUTPUT_MODE=verbose")

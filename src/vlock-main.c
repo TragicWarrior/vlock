@@ -21,11 +21,9 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <errno.h>
+#include <assert.h>
 #include <time.h>
 
-#include <glib.h>
-#include <glib/gprintf.h>
-#include <glib-object.h>
 
 #include "prompt.h"
 #include "auth.h"
@@ -85,7 +83,7 @@ static const char *wake_key_charset(void)
 
 static void auth_loop(const char *username)
 {
-  GError *err = NULL;
+  VError *err = NULL;
   struct timespec *prompt_timeout;
   struct timespec *wait_timeout;
   char *vlock_message;
@@ -157,16 +155,16 @@ static void auth_loop(const char *username)
       if (auth(auth_names[i], prompt_timeout, &err))
         goto auth_success;
 
-      g_assert(err != NULL);
+      assert(err != NULL);
 
-      if (g_error_matches(err,
+      if (verror_matches(err,
                           VLOCK_PROMPT_ERROR,
                           VLOCK_PROMPT_ERROR_TIMEOUT))
         fprintf(stderr, "Timeout!\n");
       else {
         fprintf(stderr, "vlock: %s\n", err->message);
 
-        if (g_error_matches(err,
+        if (verror_matches(err,
                             VLOCK_AUTH_ERROR,
                             VLOCK_AUTH_ERROR_FAILED)) {
           fputs(auth_failure_blurb, stderr);
@@ -174,7 +172,7 @@ static void auth_loop(const char *username)
         }
       }
 
-      g_clear_error(&err);
+      verror_clear(&err);
       sleep(1);
     }
 
@@ -209,13 +207,6 @@ int main(int argc, char *const argv[])
 {
   const char *username = NULL;
 
-  /* Initialize GLib. */
-  g_set_prgname(argv[0]);
-  /* The GType system initializes itself automatically since GLib 2.36;
-   * g_type_init() is a deprecated no-op there. */
-#if !GLIB_CHECK_VERSION(2, 36, 0)
-  g_type_init();
-#endif
 
   /* Initialize logging. */
   vlock_initialize_logging();
@@ -224,31 +215,39 @@ int main(int argc, char *const argv[])
 
   /* Get the user name from the environment if started as root. */
   if (getuid() == 0)
-    username = g_getenv("USER");
+    username = getenv("USER");
 
-  if (username == NULL)
-    username = g_get_user_name();
+  if (username == NULL) {
+    struct passwd *pw = getpwuid(getuid());
+    if (pw != NULL)
+      username = pw->pw_name;
+  }
+
+  if (username == NULL) {
+    fprintf(stderr, "vlock: could not determine username\n");
+    exit(EXIT_FAILURE);
+  }
 
   vlock_atexit(display_auth_tries);
 
 #ifdef USE_PLUGINS
-  GError *tmp_error = NULL;
+  VError *tmp_error = NULL;
 
   for (int i = 1; i < argc; i++) {
     if (!load_plugin(argv[i], &tmp_error)) {
-      g_assert(tmp_error != NULL);
+      assert(tmp_error != NULL);
 
-      if (g_error_matches(tmp_error,
+      if (verror_matches(tmp_error,
                           VLOCK_PLUGIN_ERROR,
                           VLOCK_PLUGIN_ERROR_NOT_FOUND))
-        g_fprintf(stderr, "vlock: no such plugin '%s'\n", argv[i]);
+        fprintf(stderr, "vlock: no such plugin '%s'\n", argv[i]);
       else
-        g_fprintf(stderr,
+        fprintf(stderr,
                   "vlock: loading plugin '%s' failed: %s\n",
                   argv[i],
                   tmp_error->message);
 
-      g_clear_error(&tmp_error);
+      verror_clear(&tmp_error);
       exit(EXIT_FAILURE);
     }
   }
@@ -256,11 +255,11 @@ int main(int argc, char *const argv[])
   vlock_atexit(unload_plugins);
 
   if (!resolve_dependencies(&tmp_error)) {
-    g_assert(tmp_error != NULL);
-    g_fprintf(stderr,
+    assert(tmp_error != NULL);
+    fprintf(stderr,
               "vlock: error resolving plugin dependencies: %s\n",
               tmp_error->message);
-    g_clear_error(&tmp_error);
+    verror_clear(&tmp_error);
     exit(EXIT_FAILURE);
   }
 
@@ -271,22 +270,22 @@ int main(int argc, char *const argv[])
   if (argc == 2 && (strcmp(argv[1], "all") == 0)) {
     if (!lock_console_switch()) {
       if (errno)
-        g_fprintf(stderr,
+        fprintf(stderr,
                   "vlock: could not disable console switching: %s\n",
-                  g_strerror(errno));
+                  strerror(errno));
 
       exit(EXIT_FAILURE);
     }
 
     vlock_atexit((void (*) (void))unlock_console_switch);
   } else if (argc > 1) {
-    g_fprintf(stderr, "vlock: plugin support disabled\n");
+    fprintf(stderr, "vlock: plugin support disabled\n");
     exit(EXIT_FAILURE);
   }
 #endif
 
   if (!isatty(STDIN_FILENO)) {
-    g_fprintf(stderr, "vlock: stdin is not a terminal\n");
+    fprintf(stderr, "vlock: stdin is not a terminal\n");
     exit(EXIT_FAILURE);
   }
 

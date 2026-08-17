@@ -11,8 +11,11 @@
  *
  */
 
+#pragma once
+
 #include <stdbool.h>
-#include <glib.h>
+#include <stdlib.h>
+#include "vlist.h"
 
 /* An edge of the graph, specifying that predecessor must come before
  * successor. */
@@ -24,7 +27,10 @@ struct edge
 
 static inline struct edge *make_edge(void *p, void *s)
 {
-  struct edge *e = g_malloc(sizeof *e);
+  struct edge *e = malloc(sizeof *e);
+
+  if (e == NULL)
+    return NULL;
 
   e->predecessor = p;
   e->successor = s;
@@ -38,4 +44,4 @@ static inline struct edge *make_edge(void *p, void *s)
  * graph or there are edges that have no corresponding nodes NULL is returned
  * and the erroneous edges are left. */
 /* XXX: sort the list in place and return a boolean for success */
-GList *tsort(GList *nodes, GList **edges);
+VList *tsort(VList *nodes, VList **edges);

@@ -1,40 +1,26 @@
 #pragma once
 
-#include <glib-object.h>
 #include "plugin.h"
 
-/*
- * Module type macros.
- */
-#define TYPE_VLOCK_MODULE (vlock_module_get_type())
-#define VLOCK_MODULE(obj) (G_TYPE_CHECK_INSTANCE_CAST((obj), TYPE_VLOCK_MODULE,\
-                                                      VlockModule))
-#define VLOCK_MODULE_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST((klass),\
-                                                           TYPE_VLOCK_MODULE,\
-                                                           VlockModuleClass))
-#define IS_VLOCK_MODULE(obj) (G_TYPE_CHECK_INSTANCE_TYPE((obj),\
-                                                         TYPE_VLOCK_MODULE))
-#define IS_VLOCK_MODULE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),\
-                                                              TYPE_VLOCK_MODULE))
-#define VLOCK_MODULE_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS((obj),\
-                                                               TYPE_VLOCK_MODULE,\
-                                                               VlockModuleClass))
+typedef struct VlockModule VlockModule;
 
-typedef struct _VlockModule VlockModule;
-typedef struct _VlockModuleClass VlockModuleClass;
+/* A hook function as defined by a module. */
+typedef bool (*module_hook_function)(void **);
 
-typedef struct _VlockModulePrivate VlockModulePrivate;
-
-struct _VlockModule
+struct VlockModule
 {
-  VlockPlugin parent_instance;
+  VlockPlugin parent;
 
-  VlockModulePrivate *priv;
+  /* Handle returned by dlopen(). */
+  void *dl_handle;
+
+  /* Pointer to be used by the module's hooks. */
+  void *hook_context;
+
+  /* Array of hook functions defined by a single module.  Stored in the same
+   * order as the global hooks. */
+  module_hook_function hooks[nr_hooks];
 };
 
-struct _VlockModuleClass
-{
-  VlockPluginClass parent_class;
-};
-
-GType vlock_module_get_type(void);
+/* Allocate and initialize a module plugin for `name`.  Returns NULL on OOM. */
+VlockPlugin *vlock_module_new(const char *name);

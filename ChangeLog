@@ -1,3 +1,10 @@
+2026-08-07 Bryan Christ <bryan.christ@gmail.com>
+
+    * Remove GLib/GObject dependency from vlock-main; use libc only
+    * Add vlist (doubly-linked list) and verror (error object) helpers
+    * Rewrite plugin/module/script hierarchy with plain C vtables
+    * Replace GList/GError/g_* call sites across core and modules
+
 2018-01-28 Bryan Christ <bryan.christ@gmail.com>
 
     vlock 2.2.4

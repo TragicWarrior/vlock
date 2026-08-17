@@ -21,9 +21,8 @@
 #include <errno.h>
 #include <time.h>
 
-#include <glib.h>
-
 #include "util.h"
+#include "vlist.h"
 
 /* Parse the given string (interpreted as seconds) into a
  * timespec.  On error NULL is returned.  The caller is responsible
@@ -51,7 +50,7 @@ struct timespec *parse_seconds(const char *s)
   }
 }
 
-static GList *atexit_functions;
+static VList *atexit_functions;
 
 typedef union
 {
@@ -64,8 +63,8 @@ void vlock_invoke_atexit(void)
   while (atexit_functions != NULL) {
     function_pointer p = { .as_pointer = atexit_functions->data };
     p.as_function();
-    atexit_functions = g_list_delete_link(atexit_functions,
-                                          atexit_functions);
+    atexit_functions = vlist_delete_link(atexit_functions,
+                                         atexit_functions);
   }
 }
 
@@ -76,6 +75,5 @@ void vlock_atexit(void (*function)(void))
 
   function_pointer p = { .as_function = function };
 
-  atexit_functions = g_list_prepend(atexit_functions, p.as_pointer);
+  atexit_functions = vlist_prepend(atexit_functions, p.as_pointer);
 }
-

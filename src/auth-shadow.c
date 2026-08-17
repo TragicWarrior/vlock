@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <assert.h>
 
 #include <sys/mman.h>
 
@@ -33,12 +34,7 @@
 #include "auth.h"
 #include "prompt.h"
 
-GQuark vlock_auth_error_quark(void)
-{
-  return g_quark_from_static_string("vlock-auth-shadow-error-quark");
-}
-
-bool auth(const char *user, struct timespec *timeout, GError **error)
+bool auth(const char *user, struct timespec *timeout, VError **error)
 {
   char *pwd;
   char *cryptpw;
@@ -46,15 +42,11 @@ bool auth(const char *user, struct timespec *timeout, GError **error)
   struct spwd *spw;
   int result = false;
 
-  g_return_val_if_fail(error == NULL || *error == NULL, false);
+  if (!(error == NULL || *error == NULL)) return false;
 
   /* format the prompt */
   if (asprintf(&msg, "%s's Password: ", user) < 0) {
-    g_propagate_error(error,
-                      g_error_new_literal(
-                        VLOCK_AUTH_ERROR,
-                        VLOCK_AUTH_ERROR_FAILED,
-                        g_strerror(errno)));
+    verror_set_literal(error, VLOCK_AUTH_ERROR, VLOCK_AUTH_ERROR_FAILED, strerror(errno));
     return false;
   }
 
@@ -68,21 +60,21 @@ bool auth(const char *user, struct timespec *timeout, GError **error)
     if (errno == 0)
       goto auth_error;
 
-    g_set_error(error,
+    verror_set(error,
                 VLOCK_AUTH_ERROR,
                 VLOCK_AUTH_ERROR_FAILED,
                 "Could not get shadow record: %s",
-                g_strerror(errno));
+                strerror(errno));
     goto shadow_error;
   }
 
   /* hash the password */
   if ((cryptpw = crypt(pwd, spw->sp_pwdp)) == NULL) {
-    g_set_error(error,
+    verror_set(error,
                 VLOCK_AUTH_ERROR,
                 VLOCK_AUTH_ERROR_FAILED,
                 "crypt() failed: %s",
-                g_strerror(errno));
+                strerror(errno));
     goto shadow_error;
   }
 
@@ -91,11 +83,7 @@ bool auth(const char *user, struct timespec *timeout, GError **error)
   if (!result) {
 auth_error:
     sleep(1);
-    g_propagate_error(error,
-                      g_error_new_literal(
-                        VLOCK_AUTH_ERROR,
-                        VLOCK_AUTH_ERROR_DENIED,
-                        "Authentication failure"));
+    verror_set_literal(error, VLOCK_AUTH_ERROR, VLOCK_AUTH_ERROR_DENIED, "Authentication failure");
   }
 
 shadow_error:
@@ -109,7 +97,7 @@ prompt_error:
   /* free the prompt */
   free(msg);
 
-  g_assert(result || error != NULL);
+  assert(result || error != NULL);
 
   return result;
 }

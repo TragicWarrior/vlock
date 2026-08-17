@@ -25,69 +25,65 @@
 #include <unistd.h>
 #include <errno.h>
 #include <dlfcn.h>
+#include <assert.h>
 
 #include <sys/types.h>
 
-#include <glib.h>
-#include <glib-object.h>
-
 #include "util.h"
-
 #include "plugin.h"
 #include "module.h"
 
-/* A hook function as defined by a module. */
-typedef bool (*module_hook_function)(void **);
-
-struct _VlockModulePrivate
+static void vlock_module_destroy(VlockPlugin *plugin)
 {
-  /* Handle returned by dlopen(). */
-  void *dl_handle;
+  VlockModule *self = (VlockModule *)plugin;
 
-  /* Pointer to be used by the module's hooks. */
-  void *hook_context;
+  if (self->dl_handle != NULL) {
+    dlclose(self->dl_handle);
+    self->dl_handle = NULL;
+  }
 
-  /* Array of hook functions befined by a single module.  Stored in the same
-   * order as the global hooks. */
-  module_hook_function hooks[nr_hooks];
-};
+  free(self);
+}
 
-G_DEFINE_TYPE_WITH_PRIVATE(VlockModule, vlock_module, TYPE_VLOCK_PLUGIN)
-
-static bool vlock_module_open(VlockPlugin *plugin, GError **error)
+static bool vlock_module_open(VlockPlugin *plugin, VError **error)
 {
-  VlockModule *self = VLOCK_MODULE(plugin);
+  VlockModule *self = (VlockModule *)plugin;
 
-  g_assert(self->priv->dl_handle == NULL);
+  assert(self->dl_handle == NULL);
 
-  char *path = g_strdup_printf("%s/%s.so", VLOCK_MODULE_DIR, plugin->name);
+  char *path = NULL;
+  if (asprintf(&path, "%s/%s.so", VLOCK_MODULE_DIR, plugin->name) < 0) {
+    verror_set(error, VLOCK_PLUGIN_ERROR, VLOCK_PLUGIN_ERROR_FAILED,
+               "could not open module '%s': out of memory", plugin->name);
+    return false;
+  }
 
   /* Test for access.  This must be done manually because vlock most likely
    * runs as a setuid executable and would otherwise override restrictions. */
   if (access(path, R_OK) < 0) {
-    gint error_code = (errno == ENOENT) ?
-                      VLOCK_PLUGIN_ERROR_NOT_FOUND :
-                      VLOCK_PLUGIN_ERROR_FAILED;
+    int error_code = (errno == ENOENT) ?
+                     VLOCK_PLUGIN_ERROR_NOT_FOUND :
+                     VLOCK_PLUGIN_ERROR_FAILED;
 
-    g_set_error(
+    verror_set(
       error,
       VLOCK_PLUGIN_ERROR,
       error_code,
       "could not open module '%s': %s",
       plugin->name,
-      g_strerror(errno));
+      strerror(errno));
 
-    g_free(path);
+    free(path);
     return false;
   }
 
   /* Open the module as a shared library. */
-  void *dl_handle = self->priv->dl_handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+  void *dl_handle = self->dl_handle = dlopen(path, RTLD_NOW | RTLD_LOCAL);
 
-  g_free(path);
+  free(path);
 
   if (dl_handle == NULL) {
-    g_set_error(
+    verror_set(
       error,
       VLOCK_PLUGIN_ERROR,
       VLOCK_PLUGIN_ERROR_FAILED,
@@ -103,7 +99,7 @@ static bool vlock_module_open(VlockPlugin *plugin, GError **error)
    * avoid a strict-aliasing violation. */
   for (size_t i = 0; i < nr_hooks; i++) {
     void *sym = dlsym(dl_handle, hooks[i].name);
-    memcpy(&self->priv->hooks[i], &sym, sizeof sym);
+    memcpy(&self->hooks[i], &sym, sizeof sym);
   }
 
   /* Load all dependencies.  Unspecified dependencies are NULL. */
@@ -112,61 +108,56 @@ static bool vlock_module_open(VlockPlugin *plugin, GError **error)
 
     /* Append array elements to list. */
     for (size_t j = 0; dependency != NULL && (*dependency)[j] != NULL; j++) {
-      char *s = g_strdup((*dependency)[j]);
+      char *s = strdup((*dependency)[j]);
 
-      plugin->dependencies[i] = g_list_append(plugin->dependencies[i], s);
+      if (s == NULL) {
+        verror_set(error, VLOCK_PLUGIN_ERROR, VLOCK_PLUGIN_ERROR_FAILED,
+                   "could not open module '%s': out of memory", plugin->name);
+        return false;
+      }
+
+      plugin->dependencies[i] = vlist_append(plugin->dependencies[i], s);
     }
   }
 
   return true;
 }
 
-static bool vlock_module_call_hook(VlockPlugin *plugin, const gchar *hook_name)
+static bool vlock_module_call_hook(VlockPlugin *plugin, const char *hook_name)
 {
-  VlockModule *self = VLOCK_MODULE(plugin);
+  VlockModule *self = (VlockModule *)plugin;
 
   /* Find the right hook index. */
   for (size_t i = 0; i < nr_hooks; i++)
     if (strcmp(hooks[i].name, hook_name) == 0) {
-      module_hook_function hook = self->priv->hooks[i];
+      module_hook_function hook = self->hooks[i];
 
       if (hook != NULL)
-        return hook(&self->priv->hook_context);
+        return hook(&self->hook_context);
     }
 
   return true;
 }
 
-/* Initialize plugin to default values. */
-static void vlock_module_init(VlockModule *self)
-{
-  self->priv = vlock_module_get_instance_private(self);
-  self->priv->dl_handle = NULL;
-}
+static const VlockPluginClass vlock_module_class = {
+  .destroy = vlock_module_destroy,
+  .open = vlock_module_open,
+  .call_hook = vlock_module_call_hook,
+};
 
-/* Destroy module object. */
-static void vlock_module_finalize(GObject *object)
+VlockPlugin *vlock_module_new(const char *name)
 {
-  VlockModule *self = VLOCK_MODULE(object);
+  VlockModule *self = calloc(1, sizeof *self);
 
-  if (self->priv->dl_handle != NULL) {
-    dlclose(self->priv->dl_handle);
-    self->priv->dl_handle = NULL;
+  if (self == NULL)
+    return NULL;
+
+  if (!vlock_plugin_init(&self->parent, &vlock_module_class, name)) {
+    free(self);
+    return NULL;
   }
 
-  G_OBJECT_CLASS(vlock_module_parent_class)->finalize(object);
+  self->dl_handle = NULL;
+  self->hook_context = NULL;
+  return &self->parent;
 }
-
-/* Initialize module class. */
-static void vlock_module_class_init(VlockModuleClass *klass)
-{
-  GObjectClass *gobject_class = G_OBJECT_CLASS(klass);
-  VlockPluginClass *plugin_class = VLOCK_PLUGIN_CLASS(klass);
-
-  /* Virtual methods. */
-  gobject_class->finalize = vlock_module_finalize;
-
-  plugin_class->open = vlock_module_open;
-  plugin_class->call_hook = vlock_module_call_hook;
-}
-
